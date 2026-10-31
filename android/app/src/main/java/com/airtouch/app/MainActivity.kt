@@ -207,7 +207,7 @@ class MainActivity : Activity() {
         val sub = TextView(this).apply {
             text = "依次点击下面三个选项，系统会自动弹出询问，全部点亮后即可启动"
             textSize = 13f; setTextColor(0xFF8890A8.toInt()); setPadding(0, dp(8), 0, dp(20))
-            setLineSpacingMultiplier(1.4f)
+            setLineSpacing(0f, 1.4f)
         }
         col.addView(sub)
 
@@ -278,7 +278,7 @@ class MainActivity : Activity() {
         col.addView(TextView(this).apply {
             text = "提示：把 AirTouch 的无障碍服务保持开启，即可在任何 App 里悬空操作。\n停止：回到本 App 点「停止」或关闭无障碍服务。"
             textSize = 11f; setTextColor(0xFF4A5068.toInt()); setPadding(0, dp(16), 0, 0)
-            setLineSpacingMultiplier(1.5f)
+            setLineSpacing(0f, 1.5f)
         })
         permView.addView(col)
         root.addView(permView, FrameLayout.LayoutParams(-1, -1))
