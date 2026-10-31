@@ -60,7 +60,11 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         immersive()
-        root = FrameLayout(this).apply { setBackgroundColor(0xFF07080F.toInt()) }
+        root = FrameLayout(this).apply {
+            background = GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                intArrayOf(0xFF05060A.toInt(), 0xFF0E1022.toInt()))
+        }
         buildSplash(); buildLoader(); buildPerms()
         setContentView(root)
         enterSplash()
@@ -80,6 +84,13 @@ class MainActivity : Activity() {
     }
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
+
+    /** 苹果风渐变胶囊按钮背景 */
+    private fun pill(): GradientDrawable = GradientDrawable().apply {
+        orientation = GradientDrawable.Orientation.TL_BR
+        setColors(intArrayOf(0xFF5B7CFF.toInt(), 0xFF8A5BFF.toInt()))
+        cornerRadius = dp(27).toFloat()
+    }
 
     /* ================= SPLASH ================= */
     private fun buildSplash() {
@@ -111,6 +122,8 @@ class MainActivity : Activity() {
         // Logo
         val logo = ImageView(this).apply {
             setImageResource(R.drawable.ic_launcher)
+            clipToOutline = true
+            background = GradientDrawable().apply { cornerRadius = dp(22).toFloat() }
         }
         splashView.addView(logo, LinearLayout.LayoutParams(dp(96), dp(96)).apply { gravity = Gravity.CENTER_HORIZONTAL })
         val title = TextView(this).apply {
@@ -159,21 +172,36 @@ class MainActivity : Activity() {
         loadView = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            setBackgroundColor(0xFF07080F.toInt())
+            setBackgroundColor(Color.TRANSPARENT)
             visibility = View.GONE
         }
-        val logo = ImageView(this).apply { setImageResource(R.drawable.ic_launcher) }
+        val logo = ImageView(this).apply {
+            setImageResource(R.drawable.ic_launcher)
+            clipToOutline = true
+            background = GradientDrawable().apply { cornerRadius = dp(17).toFloat() }
+        }
         loadView.addView(logo, LinearLayout.LayoutParams(dp(72), dp(72)).apply { gravity = Gravity.CENTER_HORIZONTAL })
         val t = TextView(this).apply {
             text = "正在加载 AirTouch"
             textSize = 17f; setTextColor(Color.WHITE); gravity = Gravity.CENTER
         }
         loadView.addView(t, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(22); gravity = Gravity.CENTER_HORIZONTAL })
-        bar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal)
-            .apply { max = 100; progress = 0 }
-        loadView.addView(bar!!, LinearLayout.LayoutParams(dp(260), dp(20)).apply { topMargin = dp(26); gravity = Gravity.CENTER_HORIZONTAL })
+        bar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+            max = 100; progress = 0
+            val track = GradientDrawable().apply { cornerRadius = dp(3).toFloat(); setColor(0x24FFFFFF.toInt()) }
+            val fill = GradientDrawable(
+                GradientDrawable.Orientation.LEFT_RIGHT,
+                intArrayOf(0xFF5B7CFF.toInt(), 0xFF9B6BFF.toInt())
+            ).apply { cornerRadius = dp(3).toFloat() }
+            progressDrawable = android.graphics.drawable.LayerDrawable(
+                arrayOf(track, android.graphics.drawable.ClipDrawable(
+                    fill, Gravity.START, android.graphics.drawable.ClipDrawable.HORIZONTAL))
+            ).apply { setId(0, android.R.id.background); setId(1, android.R.id.progress) }
+        }
+        loadView.addView(bar!!, LinearLayout.LayoutParams(dp(240), dp(8)).apply { topMargin = dp(28); gravity = Gravity.CENTER_HORIZONTAL })
         pct = TextView(this).apply {
-            text = "0%"; textSize = 30f; typeface = Typeface.DEFAULT_BOLD
+            text = "0%"; textSize = 44f
+            typeface = Typeface.create("sans-serif-thin", Typeface.NORMAL)
             setTextColor(Color.WHITE); gravity = Gravity.CENTER
         }
         loadView.addView(pct!!, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(10); gravity = Gravity.CENTER_HORIZONTAL })
@@ -182,10 +210,13 @@ class MainActivity : Activity() {
         }
         loadView.addView(loadStatus!!, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(8); gravity = Gravity.CENTER_HORIZONTAL })
         startBtn = Button(this).apply {
-            text = "开 始"
-            textSize = 19f; typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.WHITE); setBackgroundColor(0xFF3D6BFF.toInt())
-            setPadding(dp(60), dp(14), dp(60), dp(14))
+            text = "开  始"
+            textSize = 18f; typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            setTextColor(Color.WHITE)
+            background = pill()
+            elevation = dp(10).toFloat()
+            stateListAnimator = null
+            setPadding(dp(52), dp(15), dp(52), dp(15))
             visibility = View.GONE; alpha = 0f
             setOnClickListener { toPerms() }
         }
@@ -195,7 +226,7 @@ class MainActivity : Activity() {
 
     /* ================= PERMISSIONS ================= */
     private fun buildPerms() {
-        permView = ScrollView(this).apply { setBackgroundColor(0xFF07080F.toInt()); visibility = View.GONE }
+        permView = ScrollView(this).apply { setBackgroundColor(Color.TRANSPARENT); visibility = View.GONE }
         val col = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; setPadding(dp(22), dp(40), dp(22), dp(30))
         }
@@ -214,9 +245,9 @@ class MainActivity : Activity() {
         fun card(tap: () -> Unit): LinearLayout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             background = GradientDrawable().apply {
-                cornerRadius = dp(18).toFloat()
-                setColor(0xFF141927.toInt())
-                setStroke(1, 0xFF232B42.toInt())
+                cornerRadius = dp(22).toFloat()
+                setColor(0xFF15171E.toInt())
+                setStroke(1, 0xFF272B3A.toInt())
             }
             setPadding(dp(18), dp(16), dp(18), dp(16))
             setOnClickListener { tap() }
@@ -267,10 +298,12 @@ class MainActivity : Activity() {
         col.addView(rowA11y, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
 
         btnLaunch = Button(this).apply {
-            text = "🚀 启动 AirTouch"
-            textSize = 17f; typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.WHITE); setBackgroundColor(0xFF3D6BFF.toInt())
-            setPadding(0, dp(14), 0, dp(14))
+            text = "启 动"
+            textSize = 17f; typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            setTextColor(Color.WHITE)
+            background = pill()
+            stateListAnimator = null
+            setPadding(0, dp(15), 0, dp(15))
             isEnabled = false; alpha = 0.45f
             setOnClickListener { launch() }
         }

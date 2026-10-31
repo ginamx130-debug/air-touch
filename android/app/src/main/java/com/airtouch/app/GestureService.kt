@@ -99,9 +99,9 @@ class GestureService : LifecycleService() {
         if (overlay != null) return
         wm = getSystemService(WINDOW_SERVICE) as WindowManager
         overlay = OverlayView(this)
-        val flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-            or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
-            or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+        val flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+            WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
         val p = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, flags,

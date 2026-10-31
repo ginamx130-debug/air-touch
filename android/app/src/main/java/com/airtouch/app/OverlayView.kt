@@ -32,14 +32,16 @@ class OverlayView(context: Context) : View(context) {
     }
     private val hudBg = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.FILL
-        color = 0xE0141826.toInt()
+        color = 0x59000000
     }
     private val hudText = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        textSize = 11f * resources.displayMetrics.scaledDensity
-        color = Color.WHITE
+        textSize = 9.5f * resources.displayMetrics.scaledDensity
+        color = 0xB3FFFFFF.toInt()
         isFakeBoldText = true
     }
     private val rect = RectF()
+    private var shownAt = 0L
+    private var hidden = false
 
     init { setLayerType(LAYER_TYPE_SOFTWARE, null) }
 
@@ -70,5 +72,16 @@ class OverlayView(context: Context) : View(context) {
         postInvalidate()
     }
 
-    fun setHud(s: String) { hud = s; postInvalidate() }
+    /** 正常状态 10 秒后自动淡出；错误信息常驻 */
+    fun setHud(s: String) {
+        val sticky = s.contains("失败") || s.contains("未开") || s.contains("!")
+        if (!sticky) {
+            if (hidden) return
+            if (shownAt == 0L) shownAt = android.os.SystemClock.uptimeMillis()
+            if (android.os.SystemClock.uptimeMillis() - shownAt > 10_000) {
+                hidden = true; hud = ""; postInvalidate(); return
+            }
+        } else hidden = false
+        if (hud != s) { hud = s; postInvalidate() }
+    }
 }
