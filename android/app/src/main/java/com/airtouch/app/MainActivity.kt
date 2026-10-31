@@ -28,6 +28,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import com.google.mediapipe.tasks.core.BaseOptions
+import com.google.mediapipe.tasks.vision.core.RunningMode
 import com.google.mediapipe.tasks.vision.handlandmarker.HandLandmarker
 
 /** 游戏式启动流：Splash 动画 → 加载画面（真实初始化引擎）→ 开始 → 权限引导 → 启动服务 */
@@ -147,7 +148,7 @@ class MainActivity : Activity() {
         logo.scaleX = 0.5f; logo.scaleY = 0.5f; logo.alpha = 0f
         logo.animate().scaleX(1f).scaleY(1f).alpha(1f).setDuration(700)
             .setInterpolator(AccelerateDecelerateInterpolator()).start()
-        title.alpha = 0f; title.translationY = dp(24)
+        title.alpha = 0f; title.translationY = dp(24).toFloat()
         title.animate().alpha(1f).translationY(0f).setStartDelay(300).setDuration(600).start()
         tag.alpha = 0f; tag.animate().alpha(1f).setStartDelay(700).setDuration(500).start()
         studio.alpha = 0f; studio.animate().alpha(1f).setStartDelay(1100).setDuration(500).start()
@@ -206,7 +207,7 @@ class MainActivity : Activity() {
         val sub = TextView(this).apply {
             text = "依次点击下面三个选项，系统会自动弹出询问，全部点亮后即可启动"
             textSize = 13f; setTextColor(0xFF8890A8.toInt()); setPadding(0, dp(8), 0, dp(20))
-            lineSpacingMultiplier = 1.4f
+            setLineSpacingMultiplier(1.4f)
         }
         col.addView(sub)
 
@@ -277,7 +278,7 @@ class MainActivity : Activity() {
         col.addView(TextView(this).apply {
             text = "提示：把 AirTouch 的无障碍服务保持开启，即可在任何 App 里悬空操作。\n停止：回到本 App 点「停止」或关闭无障碍服务。"
             textSize = 11f; setTextColor(0xFF4A5068.toInt()); setPadding(0, dp(16), 0, 0)
-            lineSpacingMultiplier = 1.5f
+            setLineSpacingMultiplier(1.5f)
         })
         permView.addView(col)
         root.addView(permView, FrameLayout.LayoutParams(-1, -1))
@@ -324,8 +325,8 @@ class MainActivity : Activity() {
             var ok = false
             try {
                 val opts = HandLandmarker.HandLandmarkerOptions.builder()
-                    .setBaseOptions(BaseOptions.builder().setModelAssetPath("hand_landmarker.task"))
-                    .setRunningMode(HandLandmarker.RunningMode.VIDEO)
+                    .setBaseOptions(BaseOptions.builder().setModelAssetPath("hand_landmarker.task").build())
+                    .setRunningMode(RunningMode.VIDEO)
                     .setNumHands(2)
                     .build()
                 val lm = HandLandmarker.createFromOptions(this, opts)

@@ -22,6 +22,7 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.lifecycle.LifecycleService
 import com.google.mediapipe.framework.image.BitmapImageBuilder
 import com.google.mediapipe.tasks.core.BaseOptions
+import com.google.mediapipe.tasks.vision.core.RunningMode
 import com.google.mediapipe.tasks.vision.handlandmarker.HandLandmarker
 import kotlin.math.hypot
 
@@ -113,10 +114,10 @@ class GestureService : LifecycleService() {
     /* ---------- MediaPipe ---------- */
     private fun initLandmarker() {
         if (landmarker != null) return
-        val base = BaseOptions.builder().setModelAssetPath("hand_landmarker.task")
+        val base = BaseOptions.builder().setModelAssetPath("hand_landmarker.task").build()
         val opts = HandLandmarker.HandLandmarkerOptions.builder()
             .setBaseOptions(base)
-            .setRunningMode(HandLandmarker.RunningMode.VIDEO)
+            .setRunningMode(RunningMode.VIDEO)
             .setNumHands(2)
             .setMinHandDetectionConfidence(0.5f)
             .setMinHandPresenceConfidence(0.5f)
@@ -141,7 +142,7 @@ class GestureService : LifecycleService() {
                 analysis.setAnalyzer(analyzerExecutor!!, ::analyze)
                 provider?.bindToLifecycle(this, CameraSelector.DEFAULT_FRONT_CAMERA, analysis)
             } catch (_: Exception) {}
-        }, mainHandler)
+        }, java.util.concurrent.Executor { mainHandler.post(it) })
     }
 
     /* ---------- 每帧分析 ---------- */

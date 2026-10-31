@@ -27,7 +27,7 @@ class AirTouchAccessibilityService : AccessibilityService() {
     fun enqueue(g: GestureDescription) { synchronized(queue) { queue.addLast(g) }; pump() }
 
     private fun pump() {
-        val g = synchronized(queue) { if (busy || queue.isEmpty()) null else queue.pollFirst() } ?: return
+        val g = synchronized(queue) { if (busy || queue.isEmpty()) null else queue.removeFirst() } ?: return
         busy = true
         dispatchGesture(g, object : GestureResultCallback() {
             override fun onCompleted(gd: GestureDescription?) { busy = false; pump() }
