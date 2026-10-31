@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">AirTouch</string>
+    <string name="a11y_desc">AirTouch 悬空触控：允许本服务用前置摄像头手势在屏幕任意位置注入点击与滑动，可随时在无障碍设置中关闭。</string>
+    <string name="notif_title">AirTouch 悬空触控运行中</string>
+    <string name="notif_text">举起手掌，捏合拇指与食指进行点击</string>
+</resources>
