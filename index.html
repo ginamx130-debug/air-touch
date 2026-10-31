@@ -1,0 +1,1188 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#000000">
+<title>AirTouch · 空中触控</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { height:100%; overflow:hidden; overscroll-behavior:none; }
+  body {
+    background:#000; color:#f5f5f7; touch-action:none; user-select:none; -webkit-user-select:none;
+    font-family:-apple-system, "PingFang SC", "HarmonyOS Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+  }
+  button { font-family:inherit; }
+
+  /* ============ 摄像头背景层 ============ */
+  #cam {
+    position:fixed; inset:0; width:100%; height:100%; object-fit:cover;
+    transform:scaleX(-1); filter:brightness(.82) saturate(1.05); display:none;
+  }
+  #cam.on { display:block; }
+  #vignette {
+    position:fixed; inset:0; pointer-events:none; z-index:1;
+    background:radial-gradient(ellipse at 50% 45%, transparent 55%, rgba(0,0,0,.55) 100%);
+  }
+  #overlay { position:fixed; inset:0; z-index:2; pointer-events:none; }
+
+  /* ============ 光标（visionOS 虹膜指针） ============ */
+  #cursor {
+    position:fixed; left:0; top:0; z-index:900; pointer-events:none;
+    opacity:0; transition:opacity .3s; will-change:transform; mix-blend-mode:plus-lighter;
+  }
+  #cursor.on { opacity:1; }
+  #cursor .halo {
+    position:absolute; left:-27px; top:-27px; width:54px; height:54px; border-radius:50%;
+    background:radial-gradient(circle, rgba(140,195,255,.30) 0%, rgba(140,195,255,.10) 45%, transparent 70%);
+    filter:blur(5px); animation:haloPulse 2.6s ease-in-out infinite;
+  }
+  @keyframes haloPulse { 50% { transform:scale(1.18); opacity:.75; } }
+  #cursor .dot {
+    position:absolute; left:-4.5px; top:-4.5px; width:9px; height:9px; border-radius:50%;
+    background:radial-gradient(circle at 35% 30%, #fff, #d5e9ff 55%, #a8ceff);
+    box-shadow:0 0 12px rgba(190,225,255,.95), 0 0 2px #fff;
+    transition:transform .16s cubic-bezier(.2,.8,.2,1);
+  }
+  #cursor.hover .dot { transform:scale(.88); }
+  #cursor.pinch .dot { transform:scale(.55); }
+  #ring {
+    position:fixed; left:0; top:0; z-index:899; pointer-events:none;
+    opacity:0; transition:opacity .3s; will-change:transform;
+  }
+  #ring.on { opacity:1; }
+  #ring .rc {
+    position:absolute; left:-20px; top:-20px; width:40px; height:40px; border-radius:50%;
+    border:1.5px solid rgba(195,228,255,.45);
+    background:radial-gradient(circle, transparent 56%, rgba(145,198,255,.12) 82%, transparent 100%);
+    transition:transform .24s cubic-bezier(.25,.9,.3,1.3), border-color .24s;
+  }
+  #ring.hover .rc { transform:scale(1.32); border-color:rgba(220,242,255,.9); }
+  #ring.pinch .rc { transform:scale(.7); border-color:#fff; }
+  #cursor2 {
+    position:fixed; left:0; top:0; z-index:898; pointer-events:none; width:7px; height:7px;
+    border-radius:50%; background:rgba(185,218,255,.6); box-shadow:0 0 10px rgba(140,200,255,.55);
+    opacity:0; transition:opacity .25s; will-change:transform; mix-blend-mode:plus-lighter;
+  }
+  #cursor2.on { opacity:1; }
+  .ripple {
+    position:fixed; z-index:897; pointer-events:none; width:12px; height:12px; margin:-6px;
+    border-radius:50%; background:radial-gradient(circle, rgba(185,222,255,.75), rgba(185,222,255,.25) 55%, transparent 72%);
+    animation:rip .5s cubic-bezier(.2,.7,.3,1) forwards;
+  }
+  @keyframes rip { to { transform:scale(4.2); opacity:0; } }
+
+  /* ============ HUD ============ */
+  #hud {
+    position:fixed; z-index:950; top:calc(env(safe-area-inset-top) + 10px); left:12px;
+    display:flex; gap:8px; align-items:center; pointer-events:none;
+  }
+  .chip {
+    background:rgba(0,0,0,.45); border:1px solid rgba(255,255,255,.12);
+    backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px);
+    border-radius:20px; padding:5px 12px; font-size:12px; color:rgba(255,255,255,.85);
+    display:flex; align-items:center; gap:6px;
+  }
+  .chip .led { width:7px; height:7px; border-radius:50%; background:#555; }
+  .chip .led.ok { background:#30d158; box-shadow:0 0 6px #30d158; }
+  .chip .led.pinch { background:#ff9f0a; box-shadow:0 0 6px #ff9f0a; }
+  #hudGear {
+    position:fixed; z-index:950; top:calc(env(safe-area-inset-top) + 10px); right:12px;
+    width:34px; height:34px; border-radius:50%; border:1px solid rgba(255,255,255,.14);
+    background:rgba(0,0,0,.45); backdrop-filter:blur(12px); color:rgba(255,255,255,.8);
+    display:flex; align-items:center; justify-content:center; cursor:pointer;
+  }
+
+  /* ============ 新手引导 ============ */
+  #guide {
+    position:fixed; z-index:940; left:50%; bottom:calc(env(safe-area-inset-bottom) + 18px);
+    transform:translateX(-50%); display:flex; gap:14px; padding:10px 16px;
+    background:rgba(0,0,0,.5); border:1px solid rgba(255,255,255,.12); border-radius:18px;
+    backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
+    font-size:12.5px; color:rgba(255,255,255,.9); white-space:nowrap;
+    transition:opacity .6s, transform .6s; pointer-events:none;
+  }
+  #guide.hide { opacity:0; transform:translateX(-50%) translateY(14px); }
+  #guide b { color:#8ed0ff; font-weight:600; }
+
+  /* ============ 虚拟手机面板 ============ */
+  #phoneWrap {
+    position:fixed; z-index:10; inset:0; display:flex; align-items:center; justify-content:center;
+    perspective:1200px; pointer-events:none;
+  }
+  .phone {
+    pointer-events:auto; position:relative;
+    width:min(390px, 92vw); height:min(790px, 92vh);
+    background:var(--glass); border:1px solid var(--stroke);
+    border-radius:46px; overflow:hidden;
+    backdrop-filter:blur(46px) saturate(1.7); -webkit-backdrop-filter:blur(46px) saturate(1.7);
+    box-shadow:0 44px 110px rgba(0,0,0,.6), 0 4px 14px rgba(0,0,0,.35),
+               inset 0 0 0 .5px rgba(255,255,255,.07);
+    display:flex; flex-direction:column;
+    transition:background .35s, color .35s;
+    --glass:rgba(23,25,33,.44); --stroke:rgba(255,255,255,.11);
+    --txt:#f5f5f7; --sub:rgba(255,255,255,.55); --panel:rgba(255,255,255,.07);
+    --panel2:rgba(255,255,255,.13); --hair:rgba(255,255,255,.1);
+    color:var(--txt);
+  }
+  .phone::before {  /* 顶部高光边 */
+    content:""; position:absolute; left:8%; right:8%; top:0; height:1px; z-index:6;
+    background:linear-gradient(90deg, transparent, rgba(255,255,255,.45), transparent);
+    pointer-events:none;
+  }
+  .phone.light {
+    --glass:rgba(247,248,252,.66); --stroke:rgba(0,0,0,.07);
+    --txt:#0c0c10; --sub:rgba(0,0,0,.5); --panel:rgba(0,0,0,.05);
+    --panel2:rgba(0,0,0,.09); --hair:rgba(0,0,0,.08);
+  }
+  @media (max-width:430px) {
+    .phone { width:96vw; height:94vh; border-radius:36px; }
+  }
+
+  .statusbar {
+    height:48px; flex:0 0 auto; display:flex; align-items:center; justify-content:space-between;
+    padding:calc(env(safe-area-inset-top) + 6px) 24px 0; font-size:14px; font-weight:600;
+  }
+  .statusbar .icons { display:flex; gap:6px; align-items:center; opacity:.9; }
+
+  #screen { flex:1; position:relative; overflow:hidden; }
+
+  /* 视图切换（visionOS 缩放入场） */
+  .view {
+    position:absolute; inset:0; display:flex; flex-direction:column;
+    opacity:0; transform:scale(.9); visibility:hidden;
+    transition:opacity .28s ease, transform .28s ease, visibility 0s .28s;
+  }
+  .view.active {
+    opacity:1; transform:scale(1); visibility:visible;
+    transition:opacity .28s ease, transform .28s ease, visibility 0s 0s;
+  }
+
+  [data-tap] { transition:transform .12s, filter .12s; cursor:pointer; }
+  [data-tap].hover { filter:brightness(1.25); }
+  [data-tap].pressed { transform:scale(.9); filter:brightness(1.4); }
+
+  /* ---- 主屏 ---- */
+  .home { padding:18px 18px 0; display:flex; flex-direction:column; height:100%; }
+  .grid {
+    display:grid; grid-template-columns:repeat(4,1fr); gap:20px 8px; padding:6px 4px 10px;
+  }
+  .app {
+    display:flex; flex-direction:column; align-items:center; gap:6px; padding:4px 0;
+  }
+  .app .ic {
+    width:60px; height:60px; border-radius:17px; display:flex; align-items:center; justify-content:center;
+    color:#fff;
+    box-shadow:0 10px 22px -6px var(--glow, rgba(0,0,0,.5)),
+               inset 0 1px 1px rgba(255,255,255,.42), inset 0 -2px 3px rgba(0,0,0,.18);
+  }
+  .app .ic svg { width:30px; height:30px; filter:drop-shadow(0 1px 2px rgba(0,0,0,.2)); }
+  .app span { font-size:11.5px; color:var(--txt); opacity:.92; text-shadow:0 1px 3px rgba(0,0,0,.3); }
+  .dots { margin-top:auto; display:flex; gap:7px; justify-content:center; padding:8px 0 10px; }
+  .dots i { width:6px; height:6px; border-radius:50%; background:var(--sub); opacity:.4; }
+  .dots i.on { opacity:.95; }
+  .dock {
+    margin:0 10px calc(12px + env(safe-area-inset-bottom));
+    background:var(--panel); border:1px solid var(--hair); border-radius:26px;
+    display:flex; justify-content:space-around; padding:10px 6px;
+  }
+  .dock .app span { display:none; }
+  .dock .app .ic { width:56px; height:56px; border-radius:16px; }
+
+  /* ---- App 通用头部 ---- */
+  .ahead {
+    flex:0 0 auto; display:flex; align-items:center; gap:10px;
+    padding:10px 16px 12px; font-size:17px; font-weight:700;
+  }
+  .back {
+    width:32px; height:32px; border-radius:50%; background:var(--panel2);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .back svg { width:18px; height:18px; }
+
+  /* ---- 相册 ---- */
+  .photos {
+    flex:1; overflow-y:auto; padding:0 10px 20px;
+    display:grid; grid-template-columns:repeat(3,1fr); gap:5px; align-content:start;
+    scrollbar-width:none;
+  }
+  .photos::-webkit-scrollbar { display:none; }
+  .photos img {
+    width:100%; aspect-ratio:1; object-fit:cover; border-radius:8px; display:block;
+  }
+  #viewer {
+    position:absolute; inset:0; z-index:40; background:rgba(0,0,0,.88);
+    display:flex; align-items:center; justify-content:center;
+    opacity:0; visibility:hidden; transition:opacity .25s, visibility 0s .25s;
+  }
+  #viewer.open { opacity:1; visibility:visible; transition:opacity .25s, visibility 0s 0s; }
+  #viewer img {
+    max-width:96%; max-height:72%; border-radius:10px; will-change:transform;
+    transform-origin:center center; box-shadow:0 20px 60px rgba(0,0,0,.6);
+  }
+  #viewerClose {
+    position:absolute; top:calc(env(safe-area-inset-top) + 14px); right:16px;
+    width:34px; height:34px; border-radius:50%; background:rgba(255,255,255,.14);
+    display:flex; align-items:center; justify-content:center; color:#fff;
+  }
+  #viewerClose svg { width:16px; height:16px; }
+  #viewerHint {
+    position:absolute; bottom:20px; left:0; right:0; text-align:center;
+    font-size:12px; color:rgba(255,255,255,.55); pointer-events:none;
+  }
+
+  /* ---- 计算器 ---- */
+  .calc { flex:1; display:flex; flex-direction:column; padding:0 18px calc(14px + env(safe-area-inset-bottom)); }
+  #calcOut {
+    flex:0 0 auto; min-height:96px; display:flex; align-items:flex-end; justify-content:flex-end;
+    font-size:52px; font-weight:300; padding:18px 6px 10px; letter-spacing:.5px;
+    font-variant-numeric:tabular-nums; overflow:hidden;
+  }
+  #calcOut.small { font-size:34px; }
+  .ckeys { flex:1; display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
+  .ck {
+    border-radius:50%; border:none; font-size:23px; font-weight:500; color:var(--txt);
+    background:var(--panel2); display:flex; align-items:center; justify-content:center; min-height:0;
+  }
+  .ck.fn { background:var(--panel); color:var(--sub); }
+  .ck.op { background:#ff9f0a; color:#fff; font-size:27px; }
+  .ck.op.sel { background:#fff; color:#ff9f0a; }
+  .ck.z { grid-column:span 2; border-radius:40px; justify-content:flex-start; padding-left:26px; }
+
+  /* ---- 音乐 ---- */
+  .music { flex:1; display:flex; flex-direction:column; align-items:center; padding:10px 24px calc(16px + env(safe-area-inset-bottom)); }
+  #art {
+    width:190px; height:190px; border-radius:50%; margin-top:12px;
+    background:conic-gradient(from 210deg, #ff5f6d, #ffc371, #47b6a0, #5b6ee1, #ff5f6d);
+    box-shadow:0 16px 40px rgba(0,0,0,.45), inset 0 0 0 6px rgba(0,0,0,.25);
+    animation:spin 9s linear infinite; animation-play-state:paused;
+  }
+  #art.spin { animation-play-state:running; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  #mTitle { margin-top:22px; font-size:19px; font-weight:700; }
+  #mArtist { margin-top:4px; font-size:13.5px; color:var(--sub); }
+  .mbar { width:100%; height:5px; border-radius:3px; background:var(--panel2); margin-top:22px; overflow:hidden; }
+  #mProg { height:100%; width:0%; background:var(--txt); border-radius:3px; }
+  .mtime { width:100%; display:flex; justify-content:space-between; font-size:11px; color:var(--sub); margin-top:6px; }
+  .mctl { display:flex; align-items:center; gap:34px; margin-top:22px; }
+  .mctl .mbtn {
+    width:56px; height:56px; border-radius:50%; background:var(--panel2); border:none;
+    display:flex; align-items:center; justify-content:center; color:var(--txt);
+  }
+  .mctl .mbtn.main { width:70px; height:70px; background:var(--txt); color:var(--glass); background:var(--txt); }
+  .phone.light .mbtn.main { color:#fff; background:#0c0c10; }
+  .mctl svg { width:24px; height:24px; }
+
+  /* ---- 设置 ---- */
+  .slist { flex:1; overflow-y:auto; padding:0 14px 24px; scrollbar-width:none; }
+  .slist::-webkit-scrollbar { display:none; }
+  .sgroup { background:var(--panel); border-radius:16px; overflow:hidden; margin-bottom:18px; }
+  .srow {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:13px 16px; font-size:15px; position:relative;
+  }
+  .srow + .srow::before {
+    content:""; position:absolute; left:16px; right:0; top:0; height:1px; background:var(--hair);
+  }
+  .srow .hint { font-size:12px; color:var(--sub); }
+  .switch {
+    width:48px; height:29px; border-radius:16px; background:var(--panel2); position:relative;
+    transition:background .2s; flex:0 0 auto;
+  }
+  .switch::after {
+    content:""; position:absolute; top:2.5px; left:2.5px; width:24px; height:24px; border-radius:50%;
+    background:#fff; box-shadow:0 2px 5px rgba(0,0,0,.3); transition:transform .2s;
+  }
+  .switch.on { background:#30d158; }
+  .switch.on::after { transform:translateX(19px); }
+  .seg { display:flex; background:var(--panel2); border-radius:9px; padding:2px; gap:2px; }
+  .seg i {
+    font-style:normal; font-size:12.5px; padding:4px 12px; border-radius:7px; color:var(--sub);
+  }
+  .seg i.on { background:var(--txt); color:var(--glass); border-radius:7px; }
+  .phone.light .seg i.on { color:#fff; background:#0c0c10; }
+
+  /* ---- 天气 ---- */
+  .weather {
+    flex:1; margin:0 12px calc(14px + env(safe-area-inset-bottom)); border-radius:24px;
+    background:linear-gradient(165deg, #3d6fd6 0%, #6fa5e8 55%, #a9c8f2 100%);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    color:#fff; text-shadow:0 1px 6px rgba(0,0,0,.25);
+  }
+  .weather .city { font-size:20px; font-weight:600; }
+  .weather .tmp { font-size:82px; font-weight:200; line-height:1.1; margin:6px 0; }
+  .weather .cond { font-size:15px; opacity:.95; }
+  .weather .rows {
+    display:flex; gap:26px; margin-top:26px; font-size:13px; opacity:.92; text-align:center;
+  }
+  .weather .rows b { display:block; font-size:16px; font-weight:600; }
+
+  /* ---- 底部 Home 条 ---- */
+  #homebar {
+    flex:0 0 auto; height:26px; display:flex; align-items:center; justify-content:center;
+    padding-bottom:calc(env(safe-area-inset-bottom) * .4);
+  }
+  #homebar i {
+    width:120px; height:5px; border-radius:3px; background:var(--sub); opacity:.75;
+  }
+
+  /* ============ Toast ============ */
+  #toast {
+    position:fixed; z-index:990; left:50%; top:calc(env(safe-area-inset-top) + 58px);
+    transform:translateX(-50%) translateY(-8px); background:rgba(20,20,26,.85);
+    border:1px solid rgba(255,255,255,.14); color:#fff; font-size:13px;
+    padding:9px 18px; border-radius:22px; opacity:0; pointer-events:none;
+    transition:opacity .25s, transform .25s; backdrop-filter:blur(10px);
+  }
+  #toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+
+  /* ============ 启动页 ============ */
+  #start {
+    position:fixed; inset:0; z-index:1000; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; gap:0; padding:28px; text-align:center;
+    background:radial-gradient(1200px 700px at 50% 20%, #101426 0%, #05060c 60%, #000 100%);
+    transition:opacity .5s, visibility 0s .5s; overflow:hidden;
+  }
+  #start.gone { opacity:0; visibility:hidden; }
+  #start::before, #start::after {
+    content:""; position:absolute; width:560px; height:560px; border-radius:50%;
+    filter:blur(95px); opacity:.32; pointer-events:none;
+    animation:aurora 16s ease-in-out infinite alternate;
+  }
+  #start::before { background:#0a84ff; top:-140px; left:-140px; }
+  #start::after  { background:#7d4dff; bottom:-160px; right:-140px; animation-delay:-8s; }
+  @keyframes aurora { to { transform:translate(70px, 45px) scale(1.18); } }
+  #start > * { position:relative; z-index:1; }
+  #start .logo {
+    width:88px; height:88px; border-radius:27px; margin-bottom:24px;
+    background:linear-gradient(140deg, #0a84ff, #5e5ce6 60%, #bf5af2);
+    display:flex; align-items:center; justify-content:center;
+    box-shadow:0 16px 50px rgba(95,110,255,.45), inset 0 1px 1px rgba(255,255,255,.45),
+               inset 0 -2px 4px rgba(0,0,0,.2);
+    animation:logoGlow 3.2s ease-in-out infinite;
+  }
+  @keyframes logoGlow {
+    50% { box-shadow:0 16px 64px rgba(120,135,255,.65), inset 0 1px 1px rgba(255,255,255,.45); }
+  }
+  #start .logo svg { width:46px; height:46px; }
+  #start h1 { font-size:28px; font-weight:800; letter-spacing:.5px; }
+  #start .sub { margin-top:10px; font-size:14.5px; color:rgba(255,255,255,.62); line-height:1.7; max-width:340px; }
+  #start .steps {
+    margin:26px 0 30px; display:flex; flex-direction:column; gap:9px; font-size:13.5px;
+    text-align:left; width:min(340px, 88vw);
+  }
+  #start .steps div {
+    display:flex; align-items:center; gap:12px; padding:11px 14px; border-radius:16px;
+    background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.09);
+    backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
+    color:rgba(255,255,255,.85); line-height:1.5;
+  }
+  #start .steps b {
+    flex:0 0 auto; width:24px; height:24px; border-radius:50%;
+    background:linear-gradient(135deg, #0a84ff, #5e5ce6);
+    color:#fff; font-size:12px; display:flex; align-items:center; justify-content:center; font-weight:700;
+    box-shadow:0 4px 10px rgba(60,110,255,.4);
+  }
+  #start .btns { display:flex; flex-direction:column; gap:12px; width:min(320px, 86vw); }
+  .bigbtn {
+    height:54px; border-radius:27px; border:none; font-size:16.5px; font-weight:700;
+    display:flex; align-items:center; justify-content:center; gap:8px; cursor:pointer;
+    transition:transform .15s, filter .15s, box-shadow .15s;
+  }
+  .bigbtn:active { transform:scale(.96); }
+  .bigbtn.primary {
+    background:linear-gradient(135deg, #0a84ff, #5e5ce6); color:#fff;
+    box-shadow:0 12px 34px rgba(60,110,255,.4), inset 0 1px 1px rgba(255,255,255,.35);
+  }
+  .bigbtn.primary:hover { filter:brightness(1.1); }
+  .bigbtn.ghost {
+    background:rgba(255,255,255,.08); color:rgba(255,255,255,.85);
+    border:1px solid rgba(255,255,255,.14); backdrop-filter:blur(10px);
+  }
+  .bigbtn[disabled] { opacity:.6; pointer-events:none; }
+  #start .priv { margin-top:22px; font-size:11.5px; color:rgba(255,255,255,.4); }
+  #camErr {
+    display:none; margin-top:16px; max-width:340px; font-size:12.5px; line-height:1.6;
+    color:#ffb4ab; background:rgba(255,69,58,.12); border:1px solid rgba(255,69,58,.3);
+    border-radius:14px; padding:10px 14px; backdrop-filter:blur(8px);
+  }
+  .spin {
+    width:16px; height:16px; border-radius:50%; border:2px solid rgba(255,255,255,.35);
+    border-top-color:#fff; animation:rot .8s linear infinite; display:none;
+  }
+  @keyframes rot { to { transform:rotate(360deg); } }
+  .loading .spin { display:block; }
+</style>
+</head>
+<body>
+
+<video id="cam" playsinline muted autoplay></video>
+<div id="vignette"></div>
+<canvas id="overlay"></canvas>
+
+<div id="hud" style="display:none">
+  <div class="chip"><span class="led" id="led"></span><span id="stateTxt">等待手部</span></div>
+  <div class="chip" id="fpsChip">-- fps</div>
+</div>
+<button id="hudGear" data-tap="gear" style="display:none" aria-label="设置"></button>
+
+<div id="guide" style="display:none">
+  <div><b>捏合</b> 点击</div>
+  <div><b>捏合拖动</b> 滚动</div>
+  <div><b>双手捏合</b> 缩放</div>
+</div>
+
+<div id="phoneWrap" style="display:none">
+  <div class="phone" id="phone">
+
+    <div class="statusbar">
+      <span id="clock">--:--</span>
+      <span class="icons" id="sbIcons"></span>
+    </div>
+
+    <div id="screen">
+
+      <!-- 主屏 -->
+      <div class="view home active" id="viewHome">
+        <div class="grid" id="appGrid"></div>
+        <div class="dots"><i class="on"></i><i></i><i></i></div>
+        <div class="dock" id="appDock"></div>
+      </div>
+
+      <!-- 相册 -->
+      <div class="view" id="view-photos">
+        <div class="ahead">
+          <div class="back" data-tap="home"></div>
+          <span>照片</span>
+        </div>
+        <div class="photos" id="photoGrid" data-scroll></div>
+        <div id="viewer">
+          <img id="viewerImg" alt="">
+          <div id="viewerClose" data-tap="closeViewer"></div>
+          <div id="viewerHint">捏合拖动平移 · 双手捏合缩放</div>
+        </div>
+      </div>
+
+      <!-- 计算器 -->
+      <div class="view" id="view-calc">
+        <div class="ahead">
+          <div class="back" data-tap="home"></div>
+          <span>计算器</span>
+        </div>
+        <div class="calc">
+          <div id="calcOut">0</div>
+          <div class="ckeys" id="calcKeys"></div>
+        </div>
+      </div>
+
+      <!-- 音乐 -->
+      <div class="view" id="view-music">
+        <div class="ahead">
+          <div class="back" data-tap="home"></div>
+          <span>音乐</span>
+        </div>
+        <div class="music">
+          <div id="art"></div>
+          <div id="mTitle">星光漫游</div>
+          <div id="mArtist">Air Mix · 单曲</div>
+          <div class="mbar"><div id="mProg"></div></div>
+          <div class="mtime"><span id="mCur">0:00</span><span>3:42</span></div>
+          <div class="mctl">
+            <button class="mbtn" data-tap="prev" id="btnPrev"></button>
+            <button class="mbtn main" data-tap="play" id="btnPlay"></button>
+            <button class="mbtn" data-tap="next" id="btnNext"></button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 设置 -->
+      <div class="view" id="view-settings">
+        <div class="ahead">
+          <div class="back" data-tap="home"></div>
+          <span>设置</span>
+        </div>
+        <div class="slist" data-scroll>
+          <div class="sgroup">
+            <div class="srow"><span>捏合灵敏度</span>
+              <span class="seg" id="segSens"><i data-tap="sens" data-sens="0.82">低</i><i data-tap="sens" data-sens="1" class="on">中</i><i data-tap="sens" data-sens="1.25">高</i></span>
+            </div>
+            <div class="srow" data-tap="tgSkeleton"><span>手部骨架</span><span class="switch on" id="swSkeleton"></span></div>
+            <div class="srow" data-tap="tgSound"><span>按键音效</span><span class="switch on" id="swSound"></span></div>
+          </div>
+          <div class="sgroup">
+            <div class="srow" data-tap="tgDark"><span>深色外观</span><span class="switch on" id="swDark"></span></div>
+            <div class="srow" data-tap="tgTilt"><span>面板视差</span><span class="switch on" id="swTilt"></span></div>
+          </div>
+          <div class="sgroup">
+            <div class="srow"><span>AirTouch</span><span class="hint">本地 AI · 演示版 0.1</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 天气 -->
+      <div class="view" id="view-weather">
+        <div class="ahead">
+          <div class="back" data-tap="home"></div>
+          <span>天气</span>
+        </div>
+        <div class="weather">
+          <div class="city">上海市</div>
+          <div class="tmp">24°</div>
+          <div class="cond">多云 · 体感 25°</div>
+          <div class="rows">
+            <div>湿度<b>62%</b></div>
+            <div>东南风<b>2 级</b></div>
+            <div>空气质量<b>良</b></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <div id="homebar" data-tap="home"><i></i></div>
+  </div>
+</div>
+
+<div id="cursor"><div class="halo"></div><div class="dot"></div></div>
+<div id="ring"><div class="rc"></div></div>
+<div id="cursor2"></div>
+<div id="toast"></div>
+
+<div id="start">
+  <div class="logo">
+    <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 3v4M8.5 5.5 10 8M15.5 5.5 14 8"/>
+      <path d="M9.5 11.5 8 10a1.6 1.6 0 0 0-2.3 2.3l3.6 4.2a5 5 0 0 0 3.8 1.8h.9a4.5 4.5 0 0 0 4.5-4.5v-2.6a1.4 1.4 0 0 0-2.8 0"/>
+      <path d="M14.6 10.4 13 8.8a1.6 1.6 0 0 0-2.3 2.3l2 2"/>
+    </svg>
+  </div>
+  <h1>AirTouch · 空中触控</h1>
+  <p class="sub">前置摄像头 + 本地 AI 手势识别，像 Vision Pro 一样用指尖光标操控手机界面</p>
+  <div class="steps">
+    <div><b>1</b>手举在胸前 30–60cm，保持食指指尖可见</div>
+    <div><b>2</b>拇指食指<b style="width:auto;background:none;padding:0 2px">捏合</b> = 点击 · 捏合拖动 = 滚动</div>
+    <div><b>3</b>双手同时捏合向两侧拉开 = 缩放</div>
+  </div>
+  <div class="btns">
+    <button class="bigbtn primary" id="btnCam">
+      <span class="spin"></span><svg id="camIco" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+      <span id="btnCamTxt">开启摄像头开始</span>
+    </button>
+    <button class="bigbtn ghost" id="btnMouse">鼠标模式（桌面体验）</button>
+  </div>
+  <div id="camErr"></div>
+  <p class="priv">视频画面仅在本地浏览器内处理，不会上传或存储</p>
+</div>
+
+<script type="module">
+/* =========================================================
+ * AirTouch — 前置摄像头 + MediaPipe 手势 → visionOS 式空中光标
+ * ========================================================= */
+import { FilesetResolver, HandLandmarker } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21";
+
+const $ = s => document.querySelector(s);
+const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
+
+/* ---------- 小图标 ---------- */
+const I = {
+  back:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>',
+  close:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>',
+  gear:'<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v2.6M12 18.9v2.6M2.5 12h2.6M18.9 12h2.6M5 5l1.9 1.9M17.1 17.1 19 19M19 5l-1.9 1.9M6.9 17.1 5 19"/></svg>',
+  prev:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h2.4v14H6zM20 5.5v13L9.5 12z"/></svg>',
+  next:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M15.6 5H18v14h-2.4zM4 5.5v13L14.5 12z"/></svg>',
+  play:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13L19 12z"/></svg>',
+  pause:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 5h3.4v14H7zM13.6 5H17v14h-3.4z"/></svg>',
+  wifi:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12.5a10 10 0 0 1 14 0M8.5 16a5 5 0 0 1 7 0"/><circle cx="12" cy="19" r="1" fill="currentColor"/></svg>',
+  bat:'<svg width="24" height="16" viewBox="0 0 28 14" fill="none" stroke="currentColor"><rect x="1" y="2" width="22" height="10" rx="3" opacity=".5"/><rect x="3" y="4" width="15" height="6" rx="1.5" fill="currentColor" stroke="none"/><path d="M25 5v4" stroke-linecap="round" opacity=".5"/></svg>',
+  sig:'<svg width="17" height="14" viewBox="0 0 18 14" fill="currentColor"><rect x="0" y="9" width="3" height="5" rx="1"/><rect x="5" y="6" width="3" height="8" rx="1"/><rect x="10" y="3" width="3" height="11" rx="1"/><rect x="15" y="0" width="3" height="14" rx="1" opacity=".4"/></svg>',
+};
+const APPS = [
+  { id:'photos',   name:'照片',   grad:'linear-gradient(140deg,#f6d365,#fda085)', glow:'rgba(253,160,133,.55)', dock:true,
+    svg:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3.5"/><circle cx="8.7" cy="8.7" r="1.6"/><path d="m21 15.5-4.8-4.8L5.5 21"/></svg>' },
+  { id:'music',    name:'音乐',   grad:'linear-gradient(140deg,#fa5c74,#ff2d55)', glow:'rgba(255,45,85,.5)', dock:true,
+    svg:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5.5L21 3v12.5"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="15.5" r="3"/></svg>' },
+  { id:'calc',     name:'计算器', grad:'linear-gradient(140deg,#5b5b60,#2c2c30)', glow:'rgba(130,130,145,.45)', dock:true,
+    svg:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><rect x="4.5" y="2.5" width="15" height="19" rx="3"/><path d="M8.5 7h7M8.5 12h.01M12 12h.01M15.5 12h.01M8.5 15.5h.01M12 15.5h.01M15.5 15.5h.01M8.5 19h.01M12 19h.01M15.5 19h.01"/></svg>' },
+  { id:'settings', name:'设置',   grad:'linear-gradient(140deg,#8e9ab0,#556070)', glow:'rgba(120,138,165,.5)', dock:true,
+    svg:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.2 5.2l1.7 1.7M17.1 17.1l1.7 1.7M18.8 5.2l-1.7 1.7M6.9 17.1l-1.7 1.7"/></svg>' },
+  { id:'weather',  name:'天气',   grad:'linear-gradient(140deg,#4aa0f5,#2a6fe0)', glow:'rgba(74,160,245,.55)',
+    svg:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5 5l1.6 1.6M17.4 17.4 19 19M19 5l-1.6 1.6M6.6 17.4 5 19"/></svg>' },
+  { id:'clock',    name:'时钟',   grad:'linear-gradient(140deg,#3a3a42,#0a0a0c)', glow:'rgba(100,100,115,.5)',
+    svg:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.2 2"/></svg>' },
+  { id:'notes',    name:'备忘录', grad:'linear-gradient(140deg,#ffd86f,#fc9f3f)', glow:'rgba(252,159,63,.55)',
+    svg:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h14v12.5L15.5 20H5z"/><path d="M15.5 20v-3.5H19M9 9.5h6M9 13h4"/></svg>' },
+  { id:'camera',   name:'相机',   grad:'linear-gradient(140deg,#a8a8b2,#5f5f68)', glow:'rgba(160,160,175,.5)',
+    svg:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M22 18.5a1.5 1.5 0 0 1-1.5 1.5h-17A1.5 1.5 0 0 1 2 18.5v-10A1.5 1.5 0 0 1 3.5 7H7l2-2.5h6L17 7h3.5A1.5 1.5 0 0 1 22 8.5z"/><circle cx="12" cy="13" r="3.6"/></svg>' },
+];
+
+/* ---------- 构建主屏 ---------- */
+$('#appGrid').innerHTML = APPS.map(a =>
+  `<div class="app" data-tap="app" data-app="${a.id}">
+     <div class="ic" style="background:${a.grad};--glow:${a.glow}">${a.svg}</div><span>${a.name}</span>
+   </div>`).join('');
+$('#appDock').innerHTML = APPS.filter(a => a.dock).map(a =>
+  `<div class="app" data-tap="app" data-app="${a.id}"><div class="ic" style="background:${a.grad};--glow:${a.glow}">${a.svg}</div></div>`).join('');
+$('#sbIcons').innerHTML = I.sig + I.wifi + I.bat;
+$('#hudGear').innerHTML = I.gear;
+$('#btnPrev').innerHTML = I.prev; $('#btnNext').innerHTML = I.next; $('#btnPlay').innerHTML = I.play;
+$('#viewerClose').innerHTML = I.close;
+document.querySelectorAll('.back').forEach(b => b.innerHTML = I.back);
+
+/* ---------- 状态 ---------- */
+const S = {
+  mode: null,            // 'cam' | 'mouse'
+  pinching: false,
+  sens: 1,
+  skeleton: true,
+  sound: true,
+  tilt: true,
+  viewerOpen: false,
+};
+const G = {               // 手势引擎状态
+  hover: null, pressEl: null, downPos: null, moved: false,
+  scroll: null, lastMove: null,
+};
+let landmarker = null, video = null, running = false;
+let lastVideoTime = -1, fpsEma = 0, lastDetT = 0;
+
+/* ---------- 音效 ---------- */
+let AC = null;
+function beep(f0 = 1500, f1 = 500, dur = .045, gain = .05) {
+  if (!S.sound) return;
+  try {
+    AC ||= new (window.AudioContext || window.webkitAudioContext)();
+    if (AC.state === 'suspended') AC.resume();
+    const o = AC.createOscillator(), g = AC.createGain();
+    o.type = 'sine'; o.frequency.setValueAtTime(f0, AC.currentTime);
+    o.frequency.exponentialRampToValueAtTime(f1, AC.currentTime + dur);
+    g.gain.setValueAtTime(gain, AC.currentTime);
+    g.gain.exponentialRampToValueAtTime(.0001, AC.currentTime + dur);
+    o.connect(g).connect(AC.destination); o.start(); o.stop(AC.currentTime + dur);
+  } catch {}
+}
+function haptic(ms = 8) { try { navigator.vibrate && navigator.vibrate(ms); } catch {} }
+
+/* ---------- Toast ---------- */
+let toastT = 0;
+function toast(msg) {
+  const t = $('#toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 1600);
+}
+
+/* ---------- 视图切换 ---------- */
+function openApp(id) {
+  if (id === 'photos')   return openView('photos');
+  if (id === 'calc')     return openView('calc');
+  if (id === 'music')    return openView('music');
+  if (id === 'settings') return openView('settings');
+  if (id === 'weather')  return openView('weather');
+  toast('演示版暂未开放');
+}
+function openView(id) {
+  closeViewer();
+  $('#viewHome').classList.remove('active');
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  $(`#view-${id}`).classList.add('active');
+}
+function goHome() {
+  closeViewer();
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  $('#viewHome').classList.add('active');
+}
+
+/* ---------- 相册 ---------- */
+const PHOTO_PROMPTS = [
+  'serene mountain lake at sunrise with mist, photorealistic landscape photography',
+  'golden hour ocean waves on tropical beach, photorealistic',
+  'misty pine forest trail with sun rays, photorealistic nature photography',
+  'futuristic city skyline at night with neon reflections, photorealistic',
+  'desert sand dunes under starry night sky, photorealistic',
+  'aurora borealis over snowy mountains, photorealistic',
+  'cherry blossom park in spring with soft light, photorealistic',
+  'modern minimal architecture with blue sky, photorealistic',
+  'cozy coffee shop window seat on rainy day, photorealistic',
+];
+$('#photoGrid').innerHTML = PHOTO_PROMPTS.map((p, i) =>
+  `<img data-tap="photo" data-i="${i}" loading="lazy" alt="photo ${i+1}"
+        src="https://trae-api-cn.mchost.guru/api/ide/v1/tool_text_to_image?prompt=${encodeURIComponent(p)}&image_size=landscape_4_3">`).join('');
+
+const viewer = $('#viewer'), viewerImg = $('#viewerImg');
+let zoom = { s:1, tx:0, ty:0, d0:0, s0:1, active:false };
+function openViewer(i) {
+  viewerImg.src = $('#photoGrid').children[i].src;
+  zoom = { s:1, tx:0, ty:0, d0:0, s0:1, active:false };
+  applyZoom(); S.viewerOpen = true; viewer.classList.add('open');
+}
+function closeViewer() {
+  if (!S.viewerOpen) return;
+  S.viewerOpen = false; viewer.classList.remove('open');
+  zoom = { s:1, tx:0, ty:0, d0:0, s0:1, active:false }; applyZoom();
+}
+function applyZoom() {
+  viewerImg.style.transform = `translate(${zoom.tx}px, ${zoom.ty}px) scale(${zoom.s})`;
+}
+
+/* ---------- 计算器 ---------- */
+let cCur = '0', cPrev = null, cOp = null, cFresh = true;
+const KEYS = ['C','±','⌫','÷','7','8','9','×','4','5','6','−','1','2','3','+','0','.','='];
+$('#calcKeys').innerHTML = KEYS.map(k => {
+  const cls = k==='C'||k==='±'||k==='⌫' ? 'ck fn' : /[÷×−+=]/.test(k) ? 'ck op' : 'ck';
+  return `<button class="${cls}${k==='0'?' z':''}" data-tap="key" data-k="${k}">${k}</button>`;
+}).join('');
+function updCalc() {
+  const out = $('#calcOut');
+  out.textContent = cCur;
+  out.classList.toggle('small', cCur.length > 7);
+  document.querySelectorAll('.ck.op').forEach(b =>
+    b.classList.toggle('sel', cOp && cFresh && b.dataset.k === cOp));
+}
+function cCompute() {
+  const a = parseFloat(cPrev), b = parseFloat(cCur);
+  let r = cOp==='+' ? a+b : cOp==='−' ? a-b : cOp==='×' ? a*b : (b===0 ? NaN : a/b);
+  if (isNaN(r)) return '错误';
+  r = Math.round(r * 1e9) / 1e9;
+  return String(r);
+}
+function calcKey(k) {
+  if (/^[0-9]$/.test(k)) { cCur = cFresh ? k : (cCur==='0' ? k : cCur + k); cFresh = false; }
+  else if (k==='.') { if (cFresh) { cCur='0.'; cFresh=false; } else if (!cCur.includes('.')) cCur+='.'; }
+  else if (k==='C') { cCur='0'; cPrev=null; cOp=null; cFresh=true; }
+  else if (k==='⌫') { if (!cFresh) cCur = cCur.length>1 ? cCur.slice(0,-1) : '0'; }
+  else if (k==='±') { cCur = cCur.startsWith('-') ? cCur.slice(1) : (cCur==='0' ? cCur : '-'+cCur); }
+  else if (k==='=') { if (cOp && !cFresh) { cCur = cCompute(); cOp=null; cPrev=null; cFresh=true; } }
+  else { // 运算符
+    if (cOp && !cFresh) cCur = cCompute();
+    cPrev = cCur; cOp = k; cFresh = true;
+  }
+  updCalc();
+}
+updCalc();
+
+/* ---------- 音乐 ---------- */
+let playing = false, mPos = 0, mTimer = null;
+function setPlay(v) {
+  playing = v;
+  $('#btnPlay').innerHTML = v ? I.pause : I.play;
+  $('#art').classList.toggle('spin', v);
+  clearInterval(mTimer);
+  if (v) mTimer = setInterval(() => {
+    mPos = (mPos + 0.42) % 222;
+    $('#mProg').style.width = (mPos/222*100) + '%';
+    $('#mCur').textContent = `${Math.floor(mPos/60)}:${String(Math.floor(mPos%60)).padStart(2,'0')}`;
+  }, 100);
+}
+setPlay(false);
+
+/* ---------- 交互动作分发（点击 = 真正执行） ---------- */
+function doAction(el) {
+  const a = el.dataset.tap;
+  if (a === 'app')        openApp(el.dataset.app);
+  else if (a === 'home')  goHome();
+  else if (a === 'photo') openViewer(+el.dataset.i);
+  else if (a === 'closeViewer') closeViewer();
+  else if (a === 'key')   calcKey(el.dataset.k);
+  else if (a === 'play')  setPlay(!playing);
+  else if (a === 'prev' || a === 'next') { mPos = 0; $('#mProg').style.width='0%'; toast(a==='prev' ? '上一首' : '下一首'); }
+  else if (a === 'gear')  openView('settings');
+  else if (a === 'sens') {
+    document.querySelectorAll('#segSens i').forEach(x => x.classList.remove('on'));
+    el.classList.add('on'); S.sens = parseFloat(el.dataset.sens);
+  }
+  else if (a === 'tgDark') {
+    const on = $('#swDark').classList.toggle('on');
+    $('#phone').classList.toggle('light', !on);
+  }
+  else if (a === 'tgSkeleton') { S.skeleton = $('#swSkeleton').classList.toggle('on'); }
+  else if (a === 'tgSound')    { S.sound = $('#swSound').classList.toggle('on'); }
+  else if (a === 'tgTilt')     { S.tilt = $('#swTilt').classList.toggle('on'); if(!S.tilt) $('#phone').style.transform=''; }
+}
+
+/* ---------- 手势引擎：点击 / 拖拽滚动 / 惯性 ---------- */
+function tapAt(x, y) {
+  const el = document.elementFromPoint(x, y);
+  return el ? el.closest('[data-tap]') : null;
+}
+function gestureStart(x, y) {
+  const el = document.elementFromPoint(x, y);
+  G.pressEl = el ? el.closest('[data-tap]') : null;
+  G.downPos = {x, y}; G.moved = false;
+  if (G.pressEl) { G.pressEl.classList.add('pressed'); haptic(6); beep(1300, 700, .04, .04); }
+  const sc = el ? el.closest('[data-scroll]') : null;
+  if (sc) G.scroll = { el: sc, lastY: y, vy: 0 };
+}
+function gestureMove(x, y) {
+  if (G.lastMove) {
+    const dx = x - G.lastMove.x, dy = y - G.lastMove.y;
+    if (G.pressEl && Math.hypot(x - G.downPos.x, y - G.downPos.y) > 14) {
+      G.moved = true; G.pressEl.classList.remove('pressed');
+    }
+    if (G.scroll) {
+      G.scroll.el.scrollTop -= dy * 1.9;
+      G.scroll.vy = G.scroll.vy * .7 + dy * .3;
+    } else if (S.viewerOpen && !zoom.active) {
+      if (zoom.s > 1) { zoom.tx += dx; zoom.ty += dy; applyZoom(); }
+    }
+  }
+  G.lastMove = {x, y};
+}
+function gestureEnd(x, y) {
+  if (G.pressEl) G.pressEl.classList.remove('pressed');
+  if (!G.moved) {
+    ripple(x, y); haptic(10); beep(1700, 900, .05, .05);
+    /* 鼠标模式下 pointerup 自带原生 click，不手动再触发，避免双击 */
+    if (S.mode === 'cam' && G.pressEl) G.pressEl.click();
+  }
+  if (G.scroll) {
+    const st = G.scroll; G.scroll = null;
+    let vy = -st.vy * 1.9;
+    (function step() {
+      if (Math.abs(vy) < .4) return;
+      st.el.scrollTop += vy; vy *= .92; requestAnimationFrame(step);
+    })();
+  }
+  G.pressEl = null; G.downPos = null; G.lastMove = null;
+}
+function ripple(x, y) {
+  const r = document.createElement('div');
+  r.className = 'ripple'; r.style.left = x+'px'; r.style.top = y+'px';
+  document.body.appendChild(r);
+  r.addEventListener('animationend', () => r.remove());
+}
+
+/* 点击动作统一分发（手势 el.click() 与原生点击都汇到这里） */
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-tap]');
+  if (t) doAction(t);
+}, true); // 捕获阶段，确保 el.click() 触发
+
+/* ---------- 时钟 ---------- */
+function tickClock() {
+  const d = new Date();
+  $('#clock').textContent = `${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+tickClock(); setInterval(tickClock, 5000);
+
+/* =========================================================
+ * 摄像头 + MediaPipe 手部追踪
+ * ========================================================= */
+const cursor = $('#cursor'), cursor2 = $('#cursor2'), ringEl = $('#ring');
+const cv = $('#overlay'), ctx = cv.getContext('2d');
+let cur = {x: innerWidth/2, y: innerHeight/2}, curTarget = null;
+const ring = { x: innerWidth/2, y: innerHeight/2, vx: 0, vy: 0 };
+let handSeen = 0; // 连续未见手帧数
+
+/* 光标状态（同步主点与光环） */
+function showCursor(v) { cursor.classList.toggle('on', v); ringEl.classList.toggle('on', v); }
+function setPinch(v)   { cursor.classList.toggle('pinch', v); ringEl.classList.toggle('pinch', v); }
+function setHover(v)   { cursor.classList.toggle('hover', v); ringEl.classList.toggle('hover', v); }
+
+const HAND_CONNECTIONS = [
+  [0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],
+  [9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]
+];
+const PINCH = { on: .33, off: .46 };
+
+function resizeCv() {
+  const dpr = Math.min(devicePixelRatio || 1, 2);
+  cv.width = innerWidth * dpr; cv.height = innerHeight * dpr;
+  cv.style.width = innerWidth+'px'; cv.style.height = innerHeight+'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+resizeCv(); addEventListener('resize', resizeCv);
+
+/* 视频(cover+镜像)坐标 → 屏幕坐标 */
+function mapPt(lm) {
+  const vw = video.videoWidth, vh = video.videoHeight;
+  const W = innerWidth, H = innerHeight;
+  const s = Math.max(W/vw, H/vh), dw = vw*s, dh = vh*s;
+  return { x: (W-dw)/2 + (1-lm.x)*dw, y: (H-dh)/2 + lm.y*dh };
+}
+const dist = (a,b) => Math.hypot(a.x-b.x, a.y-b.y);
+
+/* ---------- One Euro Filter（算法来源：cristal-isaac/one-euro-filter，HCI 标准方案）
+   自适应平滑：手静止时强滤波消除抖动，快速移动时自动减弱滤波保证跟手 ---------- */
+class LowPass {
+  constructor(){ this.init = false; }
+  filter(x, a){ if (!this.init){ this.init = true; this.y = x; } else this.y = a*x + (1-a)*this.y; return this.y; }
+  get(){ return this.init ? this.y : 0; }
+}
+class OneEuro {
+  constructor(minCutoff = 1.2, beta = .03, dCutoff = 1){
+    this.minCutoff = minCutoff; this.beta = beta; this.dCutoff = dCutoff;
+    this.xf = new LowPass(); this.dxf = new LowPass(); this.tPrev = null;
+  }
+  _alpha(cutoff, dt){ const tau = 1/(2*Math.PI*cutoff); return 1/(1 + tau/dt); }
+  filter(x, tMs){
+    let dt = this.tPrev == null ? 1/30 : (tMs - this.tPrev)/1000;
+    this.tPrev = tMs;
+    dt = Math.min(Math.max(dt, 1e-3), .2);
+    const dx = this.xf.init ? (x - this.xf.get())/dt : 0;
+    const edx = this.dxf.filter(dx, this._alpha(this.dCutoff, dt));
+    const cutoff = this.minCutoff + this.beta * Math.abs(edx);
+    return this.xf.filter(x, this._alpha(cutoff, dt));
+  }
+}
+const fx  = new OneEuro(1.1, .028), fy  = new OneEuro(1.1, .028);   // 主手光标
+const fx2 = new OneEuro(1.1, .028), fy2 = new OneEuro(1.1, .028);   // 副手光标
+const fr  = new OneEuro(2.5, .5);                                   // 捏合比例（轻滤波保响应）
+
+/* 捏合状态机（滞后 + 去抖） */
+const pinch1 = { active:false, cnt:0 };
+const pinch2 = { active:false, cnt:0 };
+let zoomD0 = 0;
+
+function processHands(res) {
+  const hands = res.landmarks || [];
+  const t = performance.now();
+
+  if (!hands.length) {
+    if (++handSeen > 12) {
+      showCursor(false); cursor2.classList.remove('on');
+      if (pinch1.active) { pinch1.active = false; gestureEnd(cur.x, cur.y); }
+      setLed('none', '等待手部');
+    }
+    return;
+  }
+  handSeen = 0;
+  showCursor(true);
+  const lm = hands[0];
+  const pRaw = mapPt(lm[8]);
+  const pIdx = { x: fx.filter(pRaw.x, t), y: fy.filter(pRaw.y, t) };   // 滤波后同时用于显示与命中
+  const pThumb = mapPt(lm[4]), pW = mapPt(lm[0]), pM = mapPt(lm[9]);
+  curTarget = pIdx;
+  const palm = Math.max(dist(pW, pM), 1);
+  const ratio = fr.filter(dist(pThumb, pIdx) / palm, t);
+
+  const onT = PINCH.on / S.sens, offT = PINCH.off / S.sens;
+  if (!pinch1.active) {
+    pinch1.cnt = ratio < onT ? pinch1.cnt+1 : 0;
+    if (pinch1.cnt >= 2) {
+      pinch1.active = true; pinch1.cnt = 0;
+      setPinch(true); setLed('pinch', '捏合');
+      haptic(8); beep(1100, 1600, .05, .045);
+      gestureStart(pIdx.x, pIdx.y);
+      $('#guide').classList.add('hide');
+    }
+  } else {
+    pinch1.cnt = ratio > offT ? pinch1.cnt+1 : 0;
+    if (pinch1.cnt >= 2) {
+      pinch1.active = false; pinch1.cnt = 0;
+      setPinch(false); setLed('ok', '已追踪');
+      gestureEnd(pIdx.x, pIdx.y);
+    }
+  }
+  if (pinch1.active) gestureMove(pIdx.x, pIdx.y);
+
+  /* 第二只手：双手捏合缩放查看器 */
+  if (hands.length > 1) {
+    const l2 = hands[1];
+    const q2r = mapPt(l2[8]), t2 = mapPt(l2[4]), w2 = mapPt(l2[0]), m2 = mapPt(l2[9]);
+    const q2 = { x: fx2.filter(q2r.x, t), y: fy2.filter(q2r.y, t) };
+    cursor2.classList.add('on');
+    cursor2.style.transform = `translate3d(${q2.x}px, ${q2.y}px, 0)`;
+    const r2 = dist(t2, q2r) / Math.max(dist(w2, m2), 1);
+    const was = pinch2.active;
+    if (!was && r2 < onT) pinch2.active = true;
+    if (was && r2 > offT) pinch2.active = false;
+    if (S.viewerOpen && pinch1.active && pinch2.active) {
+      const d = dist(pIdx, q2);
+      if (!zoom.active) { zoom.active = true; zoomD0 = d; zoom.s0 = zoom.s; }
+      zoom.s = clamp(zoom.s0 * d / zoomD0, 1, 4);
+      if (zoom.s <= 1) { zoom.tx = 0; zoom.ty = 0; }
+      applyZoom();
+    } else if (zoom.active && (!pinch1.active || !pinch2.active)) {
+      zoom.active = false;
+    }
+  } else {
+    pinch2.active = false; zoom.active = false;
+    cursor2.classList.remove('on');
+  }
+}
+
+/* 悬停高亮 */
+let hoverEl = null;
+function updateHover(x, y) {
+  if (pinch1.active || S.pinching) return;
+  const el = tapAt(x, y);
+  if (el !== hoverEl) {
+    hoverEl && hoverEl.classList.remove('hover');
+    hoverEl = el; el && el.classList.add('hover');
+    setHover(!!el);
+  }
+}
+
+/* 骨架绘制 */
+function drawHands(res) {
+  ctx.clearRect(0, 0, innerWidth, innerHeight);
+  if (!S.skeleton) return;
+  for (const lm of (res.landmarks || [])) {
+    const pts = lm.map(mapPt);
+    ctx.lineWidth = 2.2;
+    ctx.strokeStyle = 'rgba(130,215,255,.5)';
+    ctx.shadowColor = 'rgba(90,180,255,.8)'; ctx.shadowBlur = 7;
+    ctx.beginPath();
+    for (const [a,b] of HAND_CONNECTIONS) {
+      ctx.moveTo(pts[a].x, pts[a].y); ctx.lineTo(pts[b].x, pts[b].y);
+    }
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    for (let i = 0; i < pts.length; i++) {
+      const tip = i===4 || i===8 || i===12 || i===16 || i===20;
+      ctx.fillStyle = tip ? 'rgba(180,230,255,.95)' : 'rgba(255,255,255,.65)';
+      ctx.beginPath(); ctx.arc(pts[i].x, pts[i].y, tip ? 3.2 : 2.2, 0, 7); ctx.fill();
+    }
+  }
+}
+
+function setLed(state, txt) {
+  const led = $('#led');
+  led.className = 'led' + (state==='ok' ? ' ok' : state==='pinch' ? ' pinch' : '');
+  $('#stateTxt').textContent = txt;
+}
+
+/* 主循环 */
+function loop() {
+  if (!running) return;
+  if (S.mode === 'cam' && video.readyState >= 2 && video.currentTime !== lastVideoTime) {
+    lastVideoTime = video.currentTime;
+    try {
+      const res = landmarker.detectForVideo(video, performance.now());
+      const now = performance.now();
+      if (lastDetT) fpsEma = fpsEma ? fpsEma*.9 + (1000/(now-lastDetT))*.1 : 30;
+      lastDetT = now;
+      processHands(res); drawHands(res);
+      $('#fpsChip').textContent = Math.round(fpsEma) + ' fps';
+    } catch (e) { /* 单帧失败忽略 */ }
+  }
+  /* 光标平滑跟随 */
+  if (curTarget) {
+    cur.x += (curTarget.x - cur.x) * .38;
+    cur.y += (curTarget.y - cur.y) * .38;
+    cursor.style.transform = `translate3d(${cur.x}px, ${cur.y}px, 0)`;
+    /* 光环弹簧跟随：轻微滞后产生层次感（visionOS 指针质感） */
+    ring.vx = (ring.vx + (cur.x - ring.x) * .2) * .8;
+    ring.vy = (ring.vy + (cur.y - ring.y) * .2) * .8;
+    ring.x += ring.vx; ring.y += ring.vy;
+    ringEl.style.transform = `translate3d(${ring.x}px, ${ring.y}px, 0)`;
+    updateHover(cur.x, cur.y);
+  }
+  /* 面板视差 */
+  if (S.tilt) {
+    const rx = (cur.y/innerHeight - .5) * -3.5, ry = (cur.x/innerWidth - .5) * 5;
+    $('#phone').style.transform = `rotateX(${rx}deg) rotateY(${ry}deg)`;
+  }
+  requestAnimationFrame(loop);
+}
+
+/* ---------- 摄像头环境诊断 ---------- */
+function camError(html) {
+  const err = $('#camErr'); err.style.display = 'block'; err.innerHTML = html;
+}
+function popoutLink() {
+  return `<a href="${location.href}" target="_blank" rel="noopener" style="color:#8ec2ff;text-decoration:underline">在新标签页打开</a>`;
+}
+/* 启动页加载时即检测 iframe 内嵌（预览窗口），给出提示 */
+if (window.self !== window.top) {
+  const tip = document.createElement('div');
+  tip.style.cssText = 'margin-top:16px;font-size:12.5px;color:#ffd60a;max-width:340px;line-height:1.7';
+  tip.innerHTML = `检测到页面在预览窗口（iframe）中打开：浏览器会拦截内嵌页的摄像头请求。请先 ${popoutLink()}，再点「开启摄像头开始」。（手机上请直接用 Safari/Chrome 打开部署后的链接）`;
+  $('#start').insertBefore(tip, document.querySelector('#start .priv'));
+}
+
+/* ---------- 启动：摄像头模式 ---------- */
+$('#btnCam').addEventListener('click', async () => {
+  const btn = $('#btnCam');
+  btn.classList.add('loading'); btn.disabled = true;
+  $('#btnCamTxt').textContent = '正在准备摄像头…';
+  $('#camErr').style.display = 'none';
+  try {
+    if (window.isSecureContext === false)
+      throw { name: 'InsecureContext', msg: '摄像头要求安全环境（HTTPS 或 localhost）。请通过部署后的 HTTPS 链接访问本页面，不要用 IP+HTTP 直接打开。' };
+    if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia))
+      throw { name: 'NoMediaAPI', msg: '当前浏览器不提供摄像头接口。请使用较新的 Chrome / Safari / Edge，且不要在微信等 App 内置浏览器中打开。' };
+    if (window.self !== window.top)
+      throw { name: 'Embedded', msg: `当前页面嵌在预览窗口（iframe）中，浏览器会拦截摄像头请求。请先 ${popoutLink()}，在新标签页中再点一次「开启摄像头开始」。` };
+    video = $('#cam');
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode:'user', width:{ideal:1280}, height:{ideal:720}, frameRate:{ideal:30} }, audio:false
+    });
+    video.srcObject = stream;
+    await video.play();
+    $('#btnCamTxt').textContent = '正在加载 AI 模型…';
+    const vision = await FilesetResolver.forVisionTasks(
+      'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21/wasm');
+    try {
+      landmarker = await HandLandmarker.createFromOptions(vision, {
+        baseOptions: {
+          modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task',
+          delegate: 'GPU'
+        },
+        runningMode: 'VIDEO', numHands: 2
+      });
+    } catch {
+      landmarker = await HandLandmarker.createFromOptions(vision, {
+        baseOptions: {
+          modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task',
+          delegate: 'CPU'
+        },
+        runningMode: 'VIDEO', numHands: 2
+      });
+    }
+    S.mode = 'cam';
+    startUI();
+  } catch (e) {
+    btn.classList.remove('loading'); btn.disabled = false;
+    $('#btnCamTxt').textContent = '开启摄像头开始';
+    if (e.msg) return camError(e.msg);
+    if (e.name === 'NotAllowedError')
+      return camError(window.self !== window.top
+        ? `摄像头请求被浏览器拦截：页面处于 iframe 中。请 ${popoutLink()} 后重试。`
+        : '摄像头权限被拒绝：请点地址栏左侧的权限图标，将摄像头设为「允许」后刷新重试。');
+    if (e.name === 'NotFoundError' || e.name === 'OverconstrainedError')
+      return camError('未找到可用的前置摄像头设备。');
+    camError(`无法启动摄像头（${e.name || e.message}）。请确认通过 HTTPS 访问本页面。`);
+  }
+});
+
+/* ---------- 启动：鼠标模式 ---------- */
+$('#btnMouse').addEventListener('click', () => {
+  S.mode = 'mouse'; startUI();
+  setLed('ok', '鼠标模式');
+  addEventListener('pointermove', e => {
+    if (S.mode !== 'mouse') return;
+    curTarget = { x:e.clientX, y:e.clientY };
+    showCursor(true);
+    updateHover(e.clientX, e.clientY);
+  });
+  addEventListener('pointerdown', e => {
+    if (S.mode !== 'mouse' || e.target.closest('#hudGear,.bigbtn')) return;
+    if (S.pinching) return;
+    S.pinching = true; setPinch(true); setLed('pinch', '捏合');
+    gestureStart(e.clientX, e.clientY);
+  });
+  addEventListener('pointermove', e => { if (S.mode==='mouse' && S.pinching) gestureMove(e.clientX, e.clientY); });
+  addEventListener('pointerup', e => {
+    if (S.mode !== 'mouse' || !S.pinching) return;
+    S.pinching = false; setPinch(false); setLed('ok', '鼠标模式');
+    gestureEnd(e.clientX, e.clientY);
+  });
+});
+
+function startUI() {
+  $('#start').classList.add('gone');
+  $('#phoneWrap').style.display = 'flex';
+  $('#hud').style.display = 'flex';
+  $('#hudGear').style.display = 'flex';
+  const g = $('#guide'); g.style.display = 'flex';
+  setTimeout(() => g.classList.add('hide'), 7000);
+  if (S.mode === 'cam') {
+    $('#cam').classList.add('on');
+    setLed('none', '寻找手部…');
+    beep(900, 1400, .12, .04);
+  }
+  running = true;
+  requestAnimationFrame(loop);
+}
+</script>
+</body>
+</html>
