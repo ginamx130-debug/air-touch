@@ -28,19 +28,21 @@ import kotlin.math.hypot
 
 /**
  * 前台服务：CameraX 前摄 → MediaPipe 手部关键点 → 手势状态机
- * 光标 = 食指指尖（One Euro 滤波）；捏合 = 点击；捏住移动 = 滑动（分块注入）
+ * 光标 = 食指指尖（One Euro 滤波）；捏合 = 点击；捏住移动 = 滚动；双手捏合 = 快速滚动
+ * 任何故障都显示在 HUD 上，不再静默
  */
 class GestureService : LifecycleService() {
 
     companion object {
         const val ACTION_STOP = "com.airtouch.app.STOP"
         private const val CHANNEL = "airtouch"
-        private const val PINCH_ON = 0.33f      // 与网页版一致的双阈值滞回
+        private const val PINCH_ON = 0.33f
         private const val PINCH_OFF = 0.46f
-        private const val DEBOUNCE = 2          // 连续 N 帧确认
+        private const val DEBOUNCE = 2
         private const val TAP_MAX_MS = 260L
         private const val TAP_MAX_DIST = 18f
-        private const val DRAG_CHUNK = 14f      // 每移动 14px 注入一段滑动
+        private const val DRAG_CHUNK = 14f        // 单手捏合拖动：慢滚
+        private const val DRAG_CHUNK_FAST = 34f   // 双手捏合拖动：快滚
     }
 
     private var wm: WindowManager? = null
@@ -51,7 +53,6 @@ class GestureService : LifecycleService() {
 
     // 手势状态机
     private val fx = OneEuro(); private val fy = OneEuro()
-    private var ts = 0L
     private var pinched = false
     private var belowCnt = 0; private var aboveCnt = 0
     private var pinchStartMs = 0L
@@ -60,6 +61,14 @@ class GestureService : LifecycleService() {
     private var dispX = 0f; private var dispY = 0f
     private var vibratedOnce = false
 
+    // 诊断
+    private var frames = 0
+    private var fpsMark = 0L
+    private var fps = 0
+    private var lastRealTs = 0L
+    private var pinchVal = 1f
+    private var handCount = 0
+
     private val mainHandler = Handler(mainLooper)
 
     override fun onCreate() { super.onCreate(); startNotification() }
@@ -67,7 +76,13 @@ class GestureService : LifecycleService() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
         if (intent?.action == ACTION_STOP) { stopSelf(); return START_NOT_STICKY }
-        initOverlay(); initLandmarker(); startCamera()
+        try { initOverlay() } catch (_: Exception) {}
+        try {
+            initLandmarker()
+        } catch (e: Throwable) {
+            overlay?.setHud("AI 模型加载失败: ${e.javaClass.simpleName}")
+        }
+        try { startCamera() } catch (_: Exception) {}
         return START_STICKY
     }
 
@@ -79,20 +94,28 @@ class GestureService : LifecycleService() {
         super.onDestroy()
     }
 
-    /* ---------- 悬浮窗 ---------- */
+    /* ---------- 悬浮窗（双保险：应用层 → 无障碍层） ---------- */
     private fun initOverlay() {
-        if (overlay != null || !Settings.canDrawOverlays(this)) return
+        if (overlay != null) return
         wm = getSystemService(WINDOW_SERVICE) as WindowManager
         overlay = OverlayView(this)
+        val flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+            or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+            or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
         val p = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT,
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
-                or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
-            android.graphics.PixelFormat.TRANSLUCENT
-        )
-        try { wm?.addView(overlay, p) } catch (_: Exception) { overlay = null }
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, flags,
+            android.graphics.PixelFormat.TRANSLUCENT)
+        try {
+            wm?.addView(overlay, p)
+        } catch (_: Exception) {
+            val p2 = WindowManager.LayoutParams(
+                WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, flags,
+                android.graphics.PixelFormat.TRANSLUCENT)
+            try { wm?.addView(overlay, p2) } catch (_: Exception) { overlay = null }
+        }
+        overlay?.setHud("AirTouch 启动中…")
     }
 
     /* ---------- 通知 ---------- */
@@ -141,7 +164,9 @@ class GestureService : LifecycleService() {
                     .build()
                 analysis.setAnalyzer(analyzerExecutor!!, ::analyze)
                 provider?.bindToLifecycle(this, CameraSelector.DEFAULT_FRONT_CAMERA, analysis)
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                overlay?.setHud("相机启动失败: ${e.javaClass.simpleName}")
+            }
         }, java.util.concurrent.Executor { mainHandler.post(it) })
     }
 
@@ -155,30 +180,44 @@ class GestureService : LifecycleService() {
             val upright = Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, m, false)
             proxy.close()
 
-            val lm = landmarker ?: return
-            ts += 33
-            val result = lm.detectForVideo(BitmapImageBuilder(upright).build(), ts)
+            val lm = landmarker ?: run { proxy.close(); return }
+            // 真实时钟单调时间戳
+            var now = System.nanoTime() / 1_000_000L
+            if (now <= lastRealTs) now = lastRealTs + 1
+            lastRealTs = now
+            frames++
+            if (now - fpsMark > 1000) { fps = frames; frames = 0; fpsMark = now }
+            val result = lm.detectForVideo(BitmapImageBuilder(upright).build(), now)
             process(result.landmarks())
         } catch (_: Exception) {
             try { proxy.close() } catch (_: Exception) {}
         }
     }
 
+    private fun pinchRatio(lm: List<com.google.mediapipe.tasks.components.containers.NormalizedLandmark>): Float {
+        val wrist = lm[0]; val mcp = lm[9]
+        val palm = hypot(wrist.x() - mcp.x(), wrist.y() - mcp.y()) + 1e-6f
+        return hypot(lm[4].x() - lm[8].x(), lm[4].y() - lm[8].y()) / palm
+    }
+
     private fun process(hands: List<List<com.google.mediapipe.tasks.components.containers.NormalizedLandmark>>) {
         val dm = resources.displayMetrics
         val sw = dm.widthPixels.toFloat(); val sh = dm.heightPixels.toFloat()
+        val a11yOn = AirTouchAccessibilityService.INSTANCE != null
+        handCount = hands.size
 
         if (hands.isEmpty()) {
             belowCnt = 0; aboveCnt = 0; vibratedOnce = false
             overlay?.update(lastX, lastY, false, false)
+            overlay?.setHud("手:0 · ${fps}fps · 捏合:-- · 无障碍:${if (a11yOn) "开" else "未开!"}")
             return
         }
-        val lm = hands[0]
-        val wrist = lm[0]; val mcp = lm[9]
-        val palm = hypot(wrist.x() - mcp.x(), wrist.y() - mcp.y()) + 1e-6f
-        val pinch = hypot(lm[4].x() - lm[8].x(), lm[4].y() - lm[8].y()) / palm
 
-        val t = ts.toFloat()
+        val lm = hands[0]
+        val pinch = pinchRatio(lm)
+        pinchVal = pinch
+
+        val t = lastRealTs.toFloat()
         val sx = fx.filter(t, lm[8].x().toDouble()).toFloat() * sw
         val sy = fy.filter(t, lm[8].y().toDouble()).toFloat() * sh
         lastX = sx; lastY = sy
@@ -204,13 +243,21 @@ class GestureService : LifecycleService() {
             if (dt < TAP_MAX_MS && moved < TAP_MAX_DIST) a11y?.tap(sx, sy)
         }
 
+        // 双手都捏合 → 快速滚动
+        val twoPinch = hands.size >= 2 && pinchRatio(hands[1]) < PINCH_ON
         if (pinched) {
-            if (hypot(sx - dispX, sy - dispY) > DRAG_CHUNK) {
+            val chunk = if (twoPinch) DRAG_CHUNK_FAST else DRAG_CHUNK
+            if (hypot(sx - dispX, sy - dispY) > chunk) {
                 a11y?.swipe(dispX, dispY, sx, sy, 90)
                 dispX = sx; dispY = sy
             }
         }
+
         overlay?.update(sx, sy, pinched, true)
+        overlay?.setHud(
+            "手:%d · %dfps · 捏合:%.2f%s · 无障碍:%s".format(
+                handCount, fps, pinchVal, if (twoPinch) "×2" else "",
+                if (a11yOn) "开" else "未开!"))
     }
 
     private fun vibrate(ms: Long) {
