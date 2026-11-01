@@ -60,11 +60,7 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         immersive()
-        root = FrameLayout(this).apply {
-            background = GradientDrawable(
-                GradientDrawable.Orientation.TOP_BOTTOM,
-                intArrayOf(0xFF05060A.toInt(), 0xFF0E1022.toInt()))
-        }
+        root = FrameLayout(this).apply { setBackgroundColor(0xFFF2F2F7.toInt()) }
         buildSplash(); buildLoader(); buildPerms()
         setContentView(root)
         enterSplash()
@@ -85,11 +81,10 @@ class MainActivity : Activity() {
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
-    /** 苹果风渐变胶囊按钮背景 */
+    /** iOS 系统蓝主按钮（HIG: #007AFF, 圆角 14） */
     private fun pill(): GradientDrawable = GradientDrawable().apply {
-        orientation = GradientDrawable.Orientation.TL_BR
-        setColors(intArrayOf(0xFF5B7CFF.toInt(), 0xFF8A5BFF.toInt()))
-        cornerRadius = dp(27).toFloat()
+        setColor(0xFF007AFF.toInt())
+        cornerRadius = dp(14).toFloat()
     }
 
     /* ================= SPLASH ================= */
@@ -99,26 +94,6 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER
             setBackgroundColor(Color.TRANSPARENT)
         }
-        // 呼吸辉光背景
-        val glow = View(this).apply {
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.OVAL
-                setColors(intArrayOf(0x663D6BFF, 0x003D6BFF))
-            }
-        }
-        root.addView(glow, FrameLayout.LayoutParams(dp(420), dp(420)).apply { gravity = Gravity.CENTER })
-        listOf("scaleX", "scaleY").forEach {
-            val a = android.animation.ObjectAnimator.ofFloat(glow, it, 1f, 1.35f)
-            a.duration = 1600
-            a.repeatCount = android.animation.ValueAnimator.INFINITE
-            a.repeatMode = android.animation.ValueAnimator.REVERSE
-            a.start()
-        }
-        val ga = android.animation.ObjectAnimator.ofFloat(glow, "alpha", 0.55f, 1f)
-        ga.duration = 1600
-        ga.repeatCount = android.animation.ValueAnimator.INFINITE
-        ga.repeatMode = android.animation.ValueAnimator.REVERSE
-        ga.start()
         // Logo
         val logo = ImageView(this).apply {
             setImageResource(R.drawable.ic_launcher)
@@ -128,21 +103,20 @@ class MainActivity : Activity() {
         splashView.addView(logo, LinearLayout.LayoutParams(dp(96), dp(96)).apply { gravity = Gravity.CENTER_HORIZONTAL })
         val title = TextView(this).apply {
             text = "AirTouch"
-            textSize = 40f
-            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-            setTextColor(Color.WHITE)
+            textSize = 34f
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            setTextColor(0xFF1D1D1F.toInt())
             gravity = Gravity.CENTER
-            setShadowLayer(24f, 0f, 0f, 0xFF3D6BFF.toInt())
         }
         splashView.addView(title, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
             topMargin = dp(18)
         })
         val tag = TextView(this).apply {
-            text = "悬空触控 · VISION PRO ON YOUR PHONE"
-            textSize = 12f
-            setTextColor(0xFF8890A8.toInt())
-            letterSpacing = 0.2f
+            text = "悬空触控 · Air Gesture Control"
+            textSize = 13f
+            setTextColor(0xFF86868B.toInt())
+            letterSpacing = 0.05f
             gravity = Gravity.CENTER
         }
         splashView.addView(tag, LinearLayout.LayoutParams(
@@ -150,7 +124,7 @@ class MainActivity : Activity() {
         val studio = TextView(this).apply {
             text = "Vibe Coding Studio"
             textSize = 10f
-            setTextColor(0xFF4A5068.toInt())
+            setTextColor(0xFFC7C7CC.toInt())
             gravity = Gravity.CENTER
         }
         splashView.addView(studio, LinearLayout.LayoutParams(
@@ -183,30 +157,28 @@ class MainActivity : Activity() {
         loadView.addView(logo, LinearLayout.LayoutParams(dp(72), dp(72)).apply { gravity = Gravity.CENTER_HORIZONTAL })
         val t = TextView(this).apply {
             text = "正在加载 AirTouch"
-            textSize = 17f; setTextColor(Color.WHITE); gravity = Gravity.CENTER
+            textSize = 17f; typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            setTextColor(0xFF1D1D1F.toInt()); gravity = Gravity.CENTER
         }
         loadView.addView(t, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(22); gravity = Gravity.CENTER_HORIZONTAL })
         bar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
             max = 100; progress = 0
-            val track = GradientDrawable().apply { cornerRadius = dp(3).toFloat(); setColor(0x24FFFFFF.toInt()) }
-            val fill = GradientDrawable(
-                GradientDrawable.Orientation.LEFT_RIGHT,
-                intArrayOf(0xFF5B7CFF.toInt(), 0xFF9B6BFF.toInt())
-            ).apply { cornerRadius = dp(3).toFloat() }
+            val track = GradientDrawable().apply { cornerRadius = dp(2).toFloat(); setColor(0xFFE5E5EA.toInt()) }
+            val fill = GradientDrawable().apply { cornerRadius = dp(2).toFloat(); setColor(0xFF007AFF.toInt()) }
             progressDrawable = android.graphics.drawable.LayerDrawable(
                 arrayOf(track, android.graphics.drawable.ClipDrawable(
                     fill, Gravity.START, android.graphics.drawable.ClipDrawable.HORIZONTAL))
             ).apply { setId(0, android.R.id.background); setId(1, android.R.id.progress) }
         }
-        loadView.addView(bar!!, LinearLayout.LayoutParams(dp(240), dp(8)).apply { topMargin = dp(28); gravity = Gravity.CENTER_HORIZONTAL })
+        loadView.addView(bar!!, LinearLayout.LayoutParams(dp(240), dp(4)).apply { topMargin = dp(28); gravity = Gravity.CENTER_HORIZONTAL })
         pct = TextView(this).apply {
-            text = "0%"; textSize = 44f
-            typeface = Typeface.create("sans-serif-thin", Typeface.NORMAL)
-            setTextColor(Color.WHITE); gravity = Gravity.CENTER
+            text = "0%"; textSize = 15f
+            typeface = Typeface.create("sans-serif", Typeface.NORMAL)
+            setTextColor(0xFF86868B.toInt()); gravity = Gravity.CENTER
         }
         loadView.addView(pct!!, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(10); gravity = Gravity.CENTER_HORIZONTAL })
         loadStatus = TextView(this).apply {
-            text = "初始化…"; textSize = 12.5f; setTextColor(0xFF8890A8.toInt()); gravity = Gravity.CENTER
+            text = "初始化…"; textSize = 12.5f; setTextColor(0xFF86868B.toInt()); gravity = Gravity.CENTER
         }
         loadView.addView(loadStatus!!, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(8); gravity = Gravity.CENTER_HORIZONTAL })
         startBtn = Button(this).apply {
@@ -232,12 +204,13 @@ class MainActivity : Activity() {
         }
         val head = TextView(this).apply {
             text = "开机设置"
-            textSize = 24f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE)
+            textSize = 28f; typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            setTextColor(0xFF1D1D1F.toInt())
         }
         col.addView(head)
         val sub = TextView(this).apply {
             text = "依次点击下面三个选项，系统会自动弹出询问，全部点亮后即可启动"
-            textSize = 13f; setTextColor(0xFF8890A8.toInt()); setPadding(0, dp(8), 0, dp(20))
+            textSize = 13f; setTextColor(0xFF86868B.toInt()); setPadding(0, dp(8), 0, dp(20))
             setLineSpacing(0f, 1.4f)
         }
         col.addView(sub)
@@ -245,16 +218,17 @@ class MainActivity : Activity() {
         fun card(tap: () -> Unit): LinearLayout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             background = GradientDrawable().apply {
-                cornerRadius = dp(22).toFloat()
-                setColor(0xFF15171E.toInt())
-                setStroke(1, 0xFF272B3A.toInt())
+                cornerRadius = dp(14).toFloat()
+                setColor(Color.WHITE)
+                setStroke(1, 0xFFE5E5EA.toInt())
             }
             setPadding(dp(18), dp(16), dp(18), dp(16))
             setOnClickListener { tap() }
         }
         fun line(parent: LinearLayout, title: String, make: (TextView) -> TextView): TextView {
             val t = TextView(this).apply {
-                textSize = 16f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE)
+                textSize = 16f; typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+                setTextColor(0xFF1D1D1F.toInt())
             }
             parent.addView(t)
             return make(t)
@@ -269,7 +243,7 @@ class MainActivity : Activity() {
         txtCam = line(rowCam, "摄像头", { it.setTextColor(0xFFB7C4FF.toInt()); it })
         rowCam.addView(TextView(this).apply {
             text = "用于识别手势（点击自动弹出系统询问）"
-            textSize = 12f; setTextColor(0xFF6B7390.toInt()); setPadding(0, dp(4), 0, 0)
+            textSize = 12f; setTextColor(0xFF86868B.toInt()); setPadding(0, dp(4), 0, 0)
         })
         col.addView(rowCam, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
 
@@ -278,22 +252,22 @@ class MainActivity : Activity() {
                 startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
             else toast("悬浮窗已授权")
         }
-        txtOvl = TextView(this).apply { textSize = 16f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE) }
+        txtOvl = TextView(this).apply { textSize = 16f; typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL); setTextColor(0xFF1D1D1F.toInt()) }
         rowOvl.addView(txtOvl)
         rowOvl.addView(TextView(this).apply {
             text = "用于在屏幕上显示指尖光标（跳转系统开关）"
-            textSize = 12f; setTextColor(0xFF6B7390.toInt()); setPadding(0, dp(4), 0, 0)
+            textSize = 12f; setTextColor(0xFF86868B.toInt()); setPadding(0, dp(4), 0, 0)
         })
         col.addView(rowOvl, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
 
         rowA11y = card {
             startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
         }
-        txtA11y = TextView(this).apply { textSize = 16f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE) }
+        txtA11y = TextView(this).apply { textSize = 16f; typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL); setTextColor(0xFF1D1D1F.toInt()) }
         rowA11y.addView(txtA11y)
         rowA11y.addView(TextView(this).apply {
             text = "用于把捏合变成真实的点击和滑动（跳转系统开关，找到 AirTouch 开启）"
-            textSize = 12f; setTextColor(0xFF6B7390.toInt()); setPadding(0, dp(4), 0, 0)
+            textSize = 12f; setTextColor(0xFF86868B.toInt()); setPadding(0, dp(4), 0, 0)
         })
         col.addView(rowA11y, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
 
@@ -310,7 +284,7 @@ class MainActivity : Activity() {
         col.addView(btnLaunch, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(24) })
         col.addView(TextView(this).apply {
             text = "提示：把 AirTouch 的无障碍服务保持开启，即可在任何 App 里悬空操作。\n停止：回到本 App 点「停止」或关闭无障碍服务。"
-            textSize = 11f; setTextColor(0xFF4A5068.toInt()); setPadding(0, dp(16), 0, 0)
+            textSize = 11f; setTextColor(0xFF86868B.toInt()); setPadding(0, dp(16), 0, 0)
             setLineSpacing(0f, 1.5f)
         })
         permView.addView(col)
@@ -325,9 +299,9 @@ class MainActivity : Activity() {
         txtCam.text = "${if (cam) "✔" else "①"}  摄像头" + if (cam) "  已授权" else ""
         txtOvl.text = "${if (ovl) "✔" else "②"}  悬浮窗" + if (ovl) "  已授权" else ""
         txtA11y.text = "${if (a11y) "✔" else "③"}  无障碍服务" + if (a11y) "  已开启" else ""
-        txtCam.setTextColor(if (cam) 0xFF7DFFB2.toInt() else Color.WHITE)
-        txtOvl.setTextColor(if (ovl) 0xFF7DFFB2.toInt() else Color.WHITE)
-        txtA11y.setTextColor(if (a11y) 0xFF7DFFB2.toInt() else Color.WHITE)
+        txtCam.setTextColor(if (cam) 0xFF34C759.toInt() else 0xFF1D1D1F.toInt())
+        txtOvl.setTextColor(if (ovl) 0xFF34C759.toInt() else 0xFF1D1D1F.toInt())
+        txtA11y.setTextColor(if (a11y) 0xFF34C759.toInt() else 0xFF1D1D1F.toInt())
         val all = cam && ovl && a11y
         btnLaunch.isEnabled = all
         btnLaunch.alpha = if (all) 1f else 0.45f

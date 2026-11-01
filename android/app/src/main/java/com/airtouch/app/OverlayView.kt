@@ -28,7 +28,7 @@ class OverlayView(context: Context) : View(context) {
     private val ring = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         strokeWidth = 5f
-        color = 0x887AA8FF.toInt()
+        color = 0xF20A84FF.toInt()
     }
     private val hudBg = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.FILL
