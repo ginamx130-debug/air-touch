@@ -130,9 +130,14 @@ class GestureService : LifecycleService() {
             .setSmallIcon(R.drawable.ic_launcher)
             .setOngoing(true)
             .build()
-        if (Build.VERSION.SDK_INT >= 30)
-            startForeground(1, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA)
-        else startForeground(1, n)
+        if (Build.VERSION.SDK_INT >= 30) {
+            try {
+                startForeground(1, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA)
+            } catch (e: Exception) {
+                // 从后台启动 camera 型前台服务会被系统拒绝；退化为普通前台服务保命
+                try { startForeground(1, n) } catch (_: Exception) {}
+            }
+        } else startForeground(1, n)
     }
 
     /* ---------- MediaPipe ---------- */

@@ -11,10 +11,24 @@ android {
         applicationId 'com.airtouch.app'
         minSdk 26
         targetSdk 34
-        versionCode 3
+        versionCode 4
         versionName '1.0'
     }
 
+    signingConfigs {
+        release {
+            storeFile file('keystore/airtouch.jks')
+            storePassword 'airtouch2026'
+            keyAlias 'airtouch'
+            keyPassword 'airtouch2026'
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false   // R8 会破坏 MediaPipe 的 JNI 反射，刻意关闭
+            signingConfig signingConfigs.release
+        }
+    }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17

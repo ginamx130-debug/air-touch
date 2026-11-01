@@ -23,18 +23,18 @@ jobs:
           gradle-version: '8.8'
 
       - name: Build debug APK
-        run: gradle -p android assembleDebug --no-daemon
+        run: gradle -p android assembleRelease --no-daemon
 
       - uses: actions/upload-artifact@v4
         with:
-          name: AirTouch-debug-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: AirTouch-release-apk
+          path: android/app/build/outputs/apk/release/app-release.apk
 
       - name: Publish to Releases
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
           name: AirTouch ${{ github.run_number }}
-          files: android/app/build/outputs/apk/debug/app-debug.apk
+          files: android/app/build/outputs/apk/release/app-release.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

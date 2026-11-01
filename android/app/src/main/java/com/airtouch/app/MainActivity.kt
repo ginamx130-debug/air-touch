@@ -395,7 +395,8 @@ class MainActivity : Activity() {
         if (!(btnLaunch.isEnabled)) return
         startForegroundService(Intent(this, GestureService::class.java))
         Toast.makeText(this, "AirTouch 已启动：回桌面，举起手试试", Toast.LENGTH_LONG).show()
-        moveTaskToBack(true)
+        // Android 14+ 禁止后台启动相机类前台服务：必须等服务完成 startForeground 后再退后台
+        main.postDelayed({ moveTaskToBack(true) }, 1200)
     }
 
     private fun toast(s: String) = Toast.makeText(this, s, Toast.LENGTH_SHORT).show()
