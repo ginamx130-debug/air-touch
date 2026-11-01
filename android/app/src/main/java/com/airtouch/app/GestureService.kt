@@ -68,6 +68,7 @@ class GestureService : LifecycleService() {
     private var lastRealTs = 0L
     private var pinchVal = 1f
     private var handCount = 0
+    private var camSize = ""
 
     private val mainHandler = Handler(mainLooper)
 
@@ -142,9 +143,9 @@ class GestureService : LifecycleService() {
             .setBaseOptions(base)
             .setRunningMode(RunningMode.VIDEO)
             .setNumHands(2)
-            .setMinHandDetectionConfidence(0.5f)
-            .setMinHandPresenceConfidence(0.5f)
-            .setMinTrackingConfidence(0.5f)
+            .setMinHandDetectionConfidence(0.35f)
+            .setMinHandPresenceConfidence(0.35f)
+            .setMinTrackingConfidence(0.35f)
             .build()
         landmarker = HandLandmarker.createFromOptions(this, opts)
         if (analyzerExecutor == null)
@@ -178,6 +179,7 @@ class GestureService : LifecycleService() {
             m.postRotate(proxy.imageInfo.rotationDegrees.toFloat())
             m.postScale(-1f, 1f) // 前摄镜像，符合直觉
             val upright = Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, m, false)
+            if (camSize.isEmpty()) camSize = "${upright.width}x${upright.height}"
             proxy.close()
 
             val lm = landmarker ?: run { proxy.close(); return }
@@ -189,8 +191,10 @@ class GestureService : LifecycleService() {
             if (now - fpsMark > 1000) { fps = frames; frames = 0; fpsMark = now }
             val result = lm.detectForVideo(BitmapImageBuilder(upright).build(), now)
             process(result.landmarks())
-        } catch (_: Exception) {
+        } catch (e: Exception) {
             try { proxy.close() } catch (_: Exception) {}
+            // 关键诊断口：不再静默吞异常，直接上屏
+            overlay?.setHud("检测异常: ${e.javaClass.simpleName} ${e.message?.take(50) ?: ""}")
         }
     }
 
@@ -209,7 +213,7 @@ class GestureService : LifecycleService() {
         if (hands.isEmpty()) {
             belowCnt = 0; aboveCnt = 0; vibratedOnce = false
             overlay?.update(lastX, lastY, false, false)
-            overlay?.setHud("手:0 · ${fps}fps · 捏合:-- · 无障碍:${if (a11yOn) "开" else "未开!"}")
+            overlay?.setHud("手:0 · ${fps}fps · ${camSize} · 无障碍:${if (a11yOn) "开" else "未开!"}")
             return
         }
 

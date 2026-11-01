@@ -60,7 +60,11 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         immersive()
-        root = FrameLayout(this).apply { setBackgroundColor(0xFFF2F2F7.toInt()) }
+        root = FrameLayout(this).apply {
+            background = GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                intArrayOf(0xFFD9E5F8.toInt(), 0xFFEFE7F5.toInt(), 0xFFFDFDFF.toInt()))
+        }
         buildSplash(); buildLoader(); buildPerms()
         setContentView(root)
         enterSplash()
@@ -81,10 +85,17 @@ class MainActivity : Activity() {
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
-    /** iOS 系统蓝主按钮（HIG: #007AFF, 圆角 14） */
+    /** iOS 26 液态玻璃：胶囊按钮 */
     private fun pill(): GradientDrawable = GradientDrawable().apply {
         setColor(0xFF007AFF.toInt())
-        cornerRadius = dp(14).toFloat()
+        cornerRadius = 9999f
+    }
+
+    /** iOS 26 液态玻璃卡片：半透明白 + 高光描边 */
+    private fun glass(): GradientDrawable = GradientDrawable().apply {
+        setColor(0xB8FFFFFF.toInt())
+        cornerRadius = dp(28).toFloat()
+        setStroke(1, 0x8CFFFFFF.toInt())
     }
 
     /* ================= SPLASH ================= */
@@ -163,14 +174,14 @@ class MainActivity : Activity() {
         loadView.addView(t, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(22); gravity = Gravity.CENTER_HORIZONTAL })
         bar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
             max = 100; progress = 0
-            val track = GradientDrawable().apply { cornerRadius = dp(2).toFloat(); setColor(0xFFE5E5EA.toInt()) }
-            val fill = GradientDrawable().apply { cornerRadius = dp(2).toFloat(); setColor(0xFF007AFF.toInt()) }
+            val track = GradientDrawable().apply { cornerRadius = dp(3).toFloat(); setColor(0x26007AFF.toInt()) }
+            val fill = GradientDrawable().apply { cornerRadius = dp(3).toFloat(); setColor(0xFF007AFF.toInt()) }
             progressDrawable = android.graphics.drawable.LayerDrawable(
                 arrayOf(track, android.graphics.drawable.ClipDrawable(
                     fill, Gravity.START, android.graphics.drawable.ClipDrawable.HORIZONTAL))
             ).apply { setId(0, android.R.id.background); setId(1, android.R.id.progress) }
         }
-        loadView.addView(bar!!, LinearLayout.LayoutParams(dp(240), dp(4)).apply { topMargin = dp(28); gravity = Gravity.CENTER_HORIZONTAL })
+        loadView.addView(bar!!, LinearLayout.LayoutParams(dp(220), dp(6)).apply { topMargin = dp(28); gravity = Gravity.CENTER_HORIZONTAL })
         pct = TextView(this).apply {
             text = "0%"; textSize = 15f
             typeface = Typeface.create("sans-serif", Typeface.NORMAL)
@@ -200,7 +211,7 @@ class MainActivity : Activity() {
     private fun buildPerms() {
         permView = ScrollView(this).apply { setBackgroundColor(Color.TRANSPARENT); visibility = View.GONE }
         val col = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL; setPadding(dp(22), dp(40), dp(22), dp(30))
+            orientation = LinearLayout.VERTICAL; setPadding(dp(24), dp(48), dp(24), dp(30))
         }
         val head = TextView(this).apply {
             text = "开机设置"
@@ -217,11 +228,7 @@ class MainActivity : Activity() {
 
         fun card(tap: () -> Unit): LinearLayout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            background = GradientDrawable().apply {
-                cornerRadius = dp(14).toFloat()
-                setColor(Color.WHITE)
-                setStroke(1, 0xFFE5E5EA.toInt())
-            }
+            background = glass()
             setPadding(dp(18), dp(16), dp(18), dp(16))
             setOnClickListener { tap() }
         }
